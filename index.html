@@ -1,0 +1,2048 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LFG — Guildmaster</title>
+<style>
+  :root {
+    --bg: #16130e;
+    --panel: #221d15;
+    --panel2: #2b251b;
+    --border: #3d3524;
+    --text: #e8dcc2;
+    --muted: #9d9078;
+    --gold: #d4a72c;
+    --gold-dim: #8a6d1d;
+    --green: #7fb069;
+    --yellow: #e0b84c;
+    --red: #d1604f;
+    --blue: #6f9ec9;
+    --q-common: #b7ad99;
+    --q-magic: #6f9ec9;
+    --q-rare: #b884d8;
+    --q-legendary: #e0912c;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.45;
+    min-height: 100vh;
+  }
+  #app { max-width: 1100px; margin: 0 auto; padding: 0 14px 80px; }
+
+  /* ---------- header ---------- */
+  header {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 12px 0 8px; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--bg); z-index: 20;
+  }
+  .brand { font-size: 26px; font-weight: bold; color: var(--gold); letter-spacing: 2px; }
+  .brand small { font-size: 12px; color: var(--muted); letter-spacing: 0; font-weight: normal; display: block; margin-top: -4px;}
+  .goldbox { font-size: 18px; color: var(--gold); white-space: nowrap; }
+  .timers {
+    display: flex; gap: 6px; overflow-x: auto; flex: 1; min-width: 120px;
+    scrollbar-width: thin; padding: 2px 0;
+  }
+  .chip {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 12px;
+    font-size: 12px; padding: 2px 9px; white-space: nowrap; color: var(--muted);
+  }
+  .chip b { color: var(--text); font-weight: normal; }
+  .chip .cd { color: var(--gold); font-variant-numeric: tabular-nums; }
+  nav { display: flex; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--border); position: sticky; top: 55px; background: var(--bg); z-index: 19; flex-wrap: wrap;}
+  nav button {
+    background: none; border: 1px solid transparent; color: var(--muted);
+    font-family: inherit; font-size: 15px; padding: 6px 16px; cursor: pointer; border-radius: 6px;
+  }
+  nav button:hover { color: var(--text); }
+  nav button.active { color: var(--gold); border-color: var(--border); background: var(--panel); }
+
+  /* ---------- general ---------- */
+  h2 { color: var(--gold); font-size: 20px; margin: 20px 0 10px; letter-spacing: 1px; }
+  h3 { font-size: 16px; margin: 14px 0 8px; color: var(--text); }
+  .sub { color: var(--muted); font-size: 13px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; margin-bottom: 10px;
+  }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 10px; }
+  .grid .card { margin-bottom: 0; }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .spread { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  button.act {
+    background: var(--gold-dim); color: #fff8e7; border: none; border-radius: 5px;
+    font-family: inherit; font-size: 13px; padding: 5px 12px; cursor: pointer;
+  }
+  button.act:hover:not(:disabled) { background: var(--gold); color: #1a1508; }
+  button.act:disabled { background: #3a3428; color: #7a6f5a; cursor: not-allowed; }
+  button.ghost {
+    background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 5px;
+    font-family: inherit; font-size: 12px; padding: 4px 10px; cursor: pointer;
+  }
+  button.ghost:hover { color: var(--text); border-color: var(--muted); }
+  .gold-t { color: var(--gold); }
+  .green { color: var(--green); }
+  .yellow { color: var(--yellow); }
+  .red { color: var(--red); }
+  .blue { color: var(--blue); }
+  .cd { font-variant-numeric: tabular-nums; }
+  .bar { background: #17130c; border: 1px solid var(--border); border-radius: 4px; height: 8px; overflow: hidden; margin: 4px 0; }
+  .bar > div { background: var(--blue); height: 100%; }
+  .marks { letter-spacing: 3px; }
+  .flavor { font-style: italic; color: var(--muted); font-size: 13px; margin: 4px 0 6px; }
+  .tag {
+    font-size: 11px; border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 1px;
+  }
+  .tag.tank { color: var(--blue); } .tag.healer { color: var(--green); } .tag.dps { color: var(--red); }
+  .q-common { color: var(--q-common); } .q-magic { color: var(--q-magic); }
+  .q-rare { color: var(--q-rare); } .q-legendary { color: var(--q-legendary); }
+  .tag.q-common { color: var(--q-common); border-color: var(--q-common); }
+  .tag.q-magic { color: var(--q-magic); border-color: var(--q-magic); }
+  .tag.q-rare { color: var(--q-rare); border-color: var(--q-rare); }
+  .tag.q-legendary { color: var(--q-legendary); border-color: var(--q-legendary); }
+  .card.legendary-glow { box-shadow: 0 0 0 1px var(--q-legendary) inset; }
+  .ability { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .ability b { color: var(--text); font-weight: normal; }
+  hr.thin { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
+  .empty { color: var(--muted); font-style: italic; padding: 8px 0; }
+
+  /* ---------- modal ---------- */
+  #modal-wrap {
+    position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 50;
+    display: flex; align-items: flex-start; justify-content: center; padding: 40px 14px;
+    overflow-y: auto;
+  }
+  .modal {
+    background: var(--panel); border: 1px solid var(--gold-dim); border-radius: 10px;
+    max-width: 640px; width: 100%; padding: 18px 20px; margin-bottom: 40px;
+  }
+  .modal h2 { margin-top: 0; }
+  .pick-row {
+    display: flex; align-items: center; gap: 10px; padding: 7px 10px; border: 1px solid var(--border);
+    border-radius: 6px; margin-bottom: 6px; cursor: pointer; background: var(--panel2);
+  }
+  .pick-row:hover { border-color: var(--muted); }
+  .pick-row.sel { border-color: var(--gold); background: #33290f; }
+  .pick-row .nm { flex: 1; }
+  .preview { background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin: 12px 0; font-size: 14px; }
+  .preview .row { row-gap: 2px; }
+
+  /* ---------- chronicle drawer ---------- */
+  #drawer {
+    position: fixed; right: 0; top: 0; bottom: 0; width: 340px; max-width: 90vw;
+    background: var(--panel); border-left: 1px solid var(--gold-dim); z-index: 60;
+    padding: 16px; overflow-y: auto; box-shadow: -6px 0 24px rgba(0,0,0,.5);
+  }
+  .logline { font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .logline .lt { color: var(--muted); font-size: 11px; display: block; }
+  footer.note { color: var(--muted); font-size: 11px; text-align: center; margin-top: 40px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="header"></header>
+  <nav id="nav"></nav>
+  <main id="view"></main>
+  <footer class="note">LFG — your guild endures while you're away. Progress is saved automatically in this browser.</footer>
+</div>
+<div id="modal-root"></div>
+<div id="drawer-root"></div>
+
+<script>
+'use strict';
+/* =====================================================================
+ *  CONFIG — every balance number lives here. Tune freely.
+ * ===================================================================== */
+const CFG = {
+  SAVE_KEY: 'lfg-save-v1',
+
+  // --- leveling & ratings ---
+  LEVEL_CAP: 20,
+  XP_PER_LEVEL_STEP: 80,        // XP needed to go from level L to L+1 = this * L
+  RATING_PER_LEVEL: 10,         // hero rating = level * this + talent
+  TALENT_MAX: 5,                // per-hero talent bonus rolled 0..this at creation
+
+  // --- new player ---
+  STARTING_GOLD: 150,
+  STARTER_LEVEL: 1,
+
+  // --- mission success ---
+  SUCCESS_BASE: 0.80,           // chance when party rating == challenge rating
+  SUCCESS_SLOPE: 1.5,           // added per +100% rating advantage (linear on ratio)
+  SUCCESS_MIN: 0.05,
+  SUCCESS_MAX: 0.95,
+
+  // --- injuries ---
+  INJURY_BASE: 0.06,            // per-hero injury chance at rating parity
+  INJURY_SLOPE: 0.55,           // added per +100% challenge disadvantage
+  INJURY_MIN: 0.01,
+  INJURY_MAX: 0.65,
+  FAIL_INJURY_MULT: 1.75,       // injuries are likelier on failed missions
+  INJURY_DURATION_H: 12,        // hours a hero is unavailable after an injury
+  MAX_MARKS: 3,                 // marks at which a hero dies forever
+
+  // --- mission rewards ---
+  GOLD_PER_CR: 1.2,             // base mission gold = challenge rating * this
+  XP_PER_CR: 1.1,               // base per-hero XP = challenge rating * this
+  FAIL_GOLD_FRAC: 0.30,         // failed missions still pay this fraction of gold
+  FAIL_XP_FRAC: 0.35,           // ...and this fraction of XP
+  STORY_REWARD_MULT: 1.4,       // story missions pay a premium
+  PARTY_SIZE_REWARD_BONUS: 0.10, // extra gold & XP per hero beyond the 4-hero core
+
+  // --- training (safe, slow XP) ---
+  TRAINING_XP_PER_HOUR: 25,
+  TRAINING_CAP_H: 8,            // a training session ends after this many hours
+
+  // --- rest ---
+  REST_DURATION_H: 24,          // removes one injury mark on completion
+
+  // --- infirmary ---
+  INFIRMARY_BASE_COST: 150,     // gold to remove one mark instantly...
+  INFIRMARY_COST_PER_LEVEL: 25, // ...plus this per hero level
+
+  // --- the Keep ---
+  KEEP_MAX_LEVEL: 5,
+  KEEP_UPGRADE_COSTS: [300, 800, 2000, 5000], // cost to reach level 2, 3, 4, 5
+  ROSTER_BASE: 6,
+  ROSTER_PER_KEEP_LEVEL: 2,     // extra roster slots per Keep level above 1
+  TRAIN_SLOTS_BASE: 1,
+  TRAIN_SLOTS_PER_KEEP_LEVEL: 1,
+
+  // --- the job board ---
+  JOBS_PER_TIER: 6,             // postings shown per difficulty tier
+  JOB_LIFETIME_MIN_H: 6,        // a posting stays on the board between these...
+  JOB_LIFETIME_MAX_H: 18,       // ...many hours before being replaced
+  // A posting tier only appears once your highest-level living hero reaches
+  // this level — so the board never buries a young guild in impossible work.
+  JOB_TIER_MIN_LEVEL: [1, 5, 10, 15],
+  // The Novice board always keeps at least one true beginner posting (CR at or
+  // below this, 4 heroes) so a fresh level-1 party can always find easy work.
+  STARTER_CR_MAX: 49,
+
+  // --- the Tavern ---
+  RECRUIT_POOL_SIZE: 4,
+  RECRUIT_LIFETIME_MIN_H: 12,   // the hire board reshuffles itself every...
+  RECRUIT_LIFETIME_MAX_H: 18,   // ...12–18 hours on its own
+  GUILD_RENAME_COST: 100,       // gold to rename the guild after founding
+  RECRUIT_REFRESH_COST: 25,
+  RECRUIT_COST_BASE: 40,
+  RECRUIT_COST_PER_LEVEL: 30,
+  RECRUIT_COST_PER_TALENT: 12,
+  RECRUIT_LEVELS_PER_CAMPAIGN: 3, // recruit max level = 1 + this * campaigns completed
+
+  // --- class passives ---
+  FIGHTER_SUCCESS_BONUS: 0.05,  // flat success chance
+  PALADIN_INJURY_MULT: 0.6,     // party injury chance multiplier
+  BARBARIAN_XP_MULT: 1.25,      // personal XP
+  BARBARIAN_INJURY_MULT: 1.6,   // personal injury chance
+  CLERIC_RECOVERY_MULT: 0.75,   // injury recovery time multiplier (persists)
+  DRUID_SALVAGE_MULT: 1.75,     // failed-mission gold/XP fraction multiplier per Druid
+  DRUID_SALVAGE_CAP: 0.75,      // failed missions never pay more than this fraction
+  BARD_GOLD_BONUS: 0.15,
+  ROGUE_GOLD_BONUS: 0.15,
+  WIZARD_UNDERDOG_BONUS: 0.10,  // success chance when CR > party rating
+  RANGER_DURATION_MULT: 0.85,
+  WARLOCK_XP_BONUS: 0.10,       // whole-party XP
+  SORCERER_RATING_BONUS: 8,     // flat party rating
+
+  // --- relics ---
+  RELIC_DROP_CHANCE: 0.22,       // base chance a mission drops a relic
+  RELIC_FAIL_DROP_MULT: 0.4,     // failed missions drop far less often
+  RELIC_PRICE: { common: 60, magic: 180, rare: 520, legendary: 1600 },
+  RELIC_SELL_FRAC: 0.35,         // sell value as a fraction of shop price
+  SHOP_STOCK_SIZE: 5,            // relics on sale at the Reliquary
+  SHOP_REFRESH_COST: 60,         // pay to force fresh stock
+  SHOP_LIFETIME_MIN_H: 12,       // stock rotates on its own every...
+  SHOP_LIFETIME_MAX_H: 24,       // ...12–24 hours
+  // relic-tier odds when a campaign chapter is first cleared (index = campaign)
+  CAMPAIGN_RELIC_WEIGHTS: [
+    { common: 30, magic: 55, rare: 15, legendary: 0 },
+    { common: 5,  magic: 50, rare: 40, legendary: 5 },
+    { common: 0,  magic: 20, rare: 60, legendary: 20 },
+    { common: 0,  magic: 5,  rare: 55, legendary: 40 },
+  ],
+
+  LOG_LIMIT: 80,
+  AWAY_MODAL_MIN_S: 60,         // show "while you were away" if gone longer than this
+};
+
+const H = 3600 * 1000; // one hour in ms
+const pct = x => Math.round(x * 100) + '%';
+
+/* =====================================================================
+ *  CLASSES
+ * ===================================================================== */
+const CLASSES = {
+  Fighter:   { role: 'tank',   aName: 'Shield Wall',        aDesc: () => `+${pct(CFG.FIGHTER_SUCCESS_BONUS)} success chance on any mission.` },
+  Paladin:   { role: 'tank',   aName: 'Aura of Protection', aDesc: () => `Party injury chance reduced ${pct(1 - CFG.PALADIN_INJURY_MULT)}.` },
+  Barbarian: { role: 'tank',   aName: 'Reckless Fury',      aDesc: () => `Earns +${pct(CFG.BARBARIAN_XP_MULT - 1)} XP, but personal injury chance +${pct(CFG.BARBARIAN_INJURY_MULT - 1)}.` },
+  Cleric:    { role: 'healer', aName: 'Mending Prayer',     aDesc: () => `Party members' injuries heal ${pct(1 - CFG.CLERIC_RECOVERY_MULT)} faster (persists after the mission).` },
+  Druid:     { role: 'healer', aName: "Nature's Bounty",    aDesc: () => `Failed missions return +${pct(CFG.DRUID_SALVAGE_MULT - 1)} more of their gold and XP.` },
+  Bard:      { role: 'healer', aName: 'Silver Tongue',      aDesc: () => `+${pct(CFG.BARD_GOLD_BONUS)} mission gold.` },
+  Rogue:     { role: 'dps',    aName: 'Sticky Fingers',     aDesc: () => `+${pct(CFG.ROGUE_GOLD_BONUS)} mission gold.` },
+  Wizard:    { role: 'dps',    aName: 'Arcane Insight',     aDesc: () => `+${pct(CFG.WIZARD_UNDERDOG_BONUS)} success chance when the challenge exceeds party rating.` },
+  Ranger:    { role: 'dps',    aName: 'Pathfinder',         aDesc: () => `Mission duration reduced ${pct(1 - CFG.RANGER_DURATION_MULT)}.` },
+  Warlock:   { role: 'dps',    aName: 'Dark Bargain',       aDesc: () => `Whole party earns +${pct(CFG.WARLOCK_XP_BONUS)} XP.` },
+  Monk:      { role: 'dps',    aName: 'Iron Body',          aDesc: () => `Never injured on successful missions.` },
+  Sorcerer:  { role: 'dps',    aName: 'Wild Blood',         aDesc: () => `+${CFG.SORCERER_RATING_BONUS} to party rating.` },
+};
+const ROLE_ICON = { tank: '🛡', healer: '✚', dps: '⚔' };
+const ROLE_NAME = { tank: 'Tank', healer: 'Healer', dps: 'DPS' };
+const CLASS_NAMES = Object.keys(CLASSES);
+const classesOfRole = r => CLASS_NAMES.filter(c => CLASSES[c].role === r);
+
+/* =====================================================================
+ *  MISSION CONTENT
+ * ===================================================================== */
+const JOB_TIERS = ['Novice Postings', 'Veteran Postings', 'Champion Postings', 'Legendary Postings'];
+// Pool of job-board templates. The board draws JOBS_PER_TIER from each tier and
+// rotates postings out after a random lifetime. size = total heroes required
+// (always at least 1 tank, 1 healer, 2 DPS; extra slots take any role).
+const JOB_POOL = [
+  // Tier 1 — Novice (levels 1–5). The CR 40–49, size-4 postings are true starter
+  // work a fresh level-1 party can win; the board always keeps one on offer.
+  { tier: 0, name: 'Rat Hunt',               cr: 42,  hours: 0.25, size: 4, flavor: 'The cellars of the Gilded Flagon have a squeaking problem. Easy coin.' },
+  { tier: 0, name: 'Root Cellar Rats',       cr: 45,  hours: 0.25, size: 4, flavor: 'The greengrocer’s stores are half-eaten. Bring boots you don’t mind ruining.' },
+  { tier: 0, name: 'Pigpen Poltergeist',     cr: 48,  hours: 0.33, size: 4, flavor: 'Something spooks the hogs each night. Probably not a ghost. Probably.' },
+  { tier: 0, name: 'Wolf Pack Cull',         cr: 56,  hours: 0.5,  size: 4, flavor: 'Winter made the wolves bold. The shepherds want them un-bolded.' },
+  { tier: 0, name: 'Caravan Escort',         cr: 66,  hours: 0.5,  size: 5, flavor: 'A merchant wants swords beside her wagons on the Greywall road — five, she insists.' },
+  { tier: 0, name: 'Missing Shepherd',       cr: 74,  hours: 0.75, size: 4, flavor: 'He went up the hill after a stray lamb three days ago. His dog came back alone.' },
+  { tier: 0, name: 'Bandit Camp',            cr: 88,  hours: 1,    size: 4, flavor: 'Toll-taking bandits have set up in the hills. Un-set them.' },
+  { tier: 0, name: 'Kobold Mine',            cr: 105, hours: 1,    size: 5, flavor: 'The silver mine reopened itself last month. The new management is small and bites.' },
+  { tier: 0, name: 'Haunted Mill',           cr: 125, hours: 1.5,  size: 4, flavor: 'The old mill grinds at midnight, though no one brings grain.' },
+  { tier: 0, name: 'Festival Watch',         cr: 145, hours: 1.5,  size: 5, flavor: 'Guards for the harvest festival. Last year something wore a mummer’s mask badly.' },
+  { tier: 0, name: 'Muster at Redhook',      cr: 165, hours: 1.5,  size: 6, flavor: 'The whole hamlet turns out against a goblin raid. Bring six and lead from the front.' },
+  // Tier 2 — Veteran (levels 5–10)
+  { tier: 1, name: 'Goblin Warrens',         cr: 190, hours: 2,    size: 4, flavor: 'A goblin nest beneath the quarry, breeding faster than it can be cleared.' },
+  { tier: 1, name: 'Ogre Toll Bridge',       cr: 220, hours: 2.5,  size: 4, flavor: 'The ogre charges two sheep per crossing. Negotiations have stalled.' },
+  { tier: 1, name: "Smugglers' Cove",        cr: 250, hours: 2,    size: 5, flavor: 'The smugglers moved something ashore last night that they now refuse to go near.' },
+  { tier: 1, name: 'Ghoul Catacombs',        cr: 275, hours: 3,    size: 4, flavor: 'The crypt-keepers stopped reporting for work. Then they started again. At night.' },
+  { tier: 1, name: 'Wyvern Cull',            cr: 300, hours: 3,    size: 5, flavor: 'Wyverns are taking sheep, then shepherds. The barons pool their gold.' },
+  { tier: 1, name: 'Harpy Cliffs',           cr: 325, hours: 3.5,  size: 4, flavor: 'The coast road is lovely this time of year, if you can ignore the singing.' },
+  { tier: 1, name: 'Manticore Hunt',         cr: 355, hours: 3.5,  size: 4, flavor: 'It has a taste for tax collectors now. The crown would like that to stop, mostly.' },
+  { tier: 1, name: 'Escort the Reliquary',   cr: 385, hours: 3,    size: 5, flavor: 'Escorts for a sealed box the church will not open, describe, or insure.' },
+  { tier: 1, name: 'Gnoll Warband',          cr: 420, hours: 4,    size: 6, flavor: 'A gnoll host is burning its way down the river road. Six blades to break them.' },
+  { tier: 1, name: 'Siege of Redfort Farm',  cr: 460, hours: 4,    size: 6, flavor: 'One farmstead, one night, one very determined orc warband. Six heroes, no fewer.' },
+  // Tier 3 — Champion (levels 10–15)
+  { tier: 2, name: 'Cursed Barrow',          cr: 440, hours: 4.5,  size: 4, flavor: 'The barrow-kings do not stay buried. They never do.' },
+  { tier: 2, name: 'Troll Bridgeheads',      cr: 490, hours: 5,    size: 5, flavor: 'Three bridges, three trolls, one increasingly creative ferry monopoly.' },
+  { tier: 2, name: 'Basilisk Quarry',        cr: 530, hours: 5,    size: 4, flavor: 'The quarry’s statues are getting remarkably lifelike. Do not make eye contact.' },
+  { tier: 2, name: "Vampire's Hunting Party",cr: 560, hours: 5.5,  size: 5, flavor: 'The count invites the finest hunters to his estate. The invitations are not optional.' },
+  { tier: 2, name: "Giant's Toll",           cr: 600, hours: 6,    size: 4, flavor: 'A frost giant has claimed the mountain pass and everything crossing it.' },
+  { tier: 2, name: 'Chimera Roost',          cr: 650, hours: 5.5,  size: 5, flavor: 'Three heads, three tempers, one very bad cliffside. Bring a healer who can multitask.' },
+  { tier: 2, name: 'Purge the Plague Ships', cr: 695, hours: 5,    size: 5, flavor: 'Three quarantined hulks drift offshore. The lights aboard keep moving.' },
+  { tier: 2, name: 'Elemental Rift',         cr: 745, hours: 6,    size: 6, flavor: 'A tear in the world leaks fire and frost by turns. Close it before it widens.' },
+  { tier: 2, name: "Warlord's Muster",       cr: 785, hours: 6,    size: 6, flavor: 'A warlord gathers the hill clans under one banner. Scatter them while you still can.' },
+  { tier: 2, name: 'Hold the Mountain Gate', cr: 830, hours: 6,    size: 6, flavor: 'The pass must hold until the refugees are through. Six shields against the dark.' },
+  // Tier 4 — Legendary (levels 15–20)
+  { tier: 3, name: 'Storm the Sky Fortress', cr: 660, hours: 8,    size: 4, flavor: 'A cloud giant’s keep drifts over the shires, and its shadow is never good news.' },
+  { tier: 3, name: "Dragon's Tribute",       cr: 700, hours: 7,    size: 5, flavor: 'Someone must explain to the dragon that the tribute will be late. In person.' },
+  { tier: 3, name: "The Lich's Auction",     cr: 745, hours: 8,    size: 4, flavor: 'Lot 34: one phylactery, provenance disputed. Bidding will be hostile.' },
+  { tier: 3, name: 'Kraken Hunt',            cr: 800, hours: 9,    size: 5, flavor: 'The harbor guild has stopped counting lost ships and started counting lost piers.' },
+  { tier: 3, name: 'Demon Breach',           cr: 855, hours: 10,   size: 5, flavor: 'The old wards are failing one candle at a time. Something leans on the door.' },
+  { tier: 3, name: 'Abyssal Gate',           cr: 920, hours: 10,   size: 6, flavor: 'A doorway of black water, and a choir on the far side that has been waiting for you.' },
+  { tier: 3, name: 'March of the Titan',     cr: 1000, hours: 10,  size: 5, flavor: 'It walks the valley floor like a man wading a stream. Five heroes might slow it.' },
+  { tier: 3, name: 'Archdevil’s Bargain',    cr: 1090, hours: 11,  size: 6, flavor: 'The contract is generous, the terms are eternal, and the negotiation is a battle.' },
+  { tier: 3, name: 'Fall of the Star-Temple',cr: 1160, hours: 11,  size: 6, flavor: 'The temple that fell from the sky has begun, very slowly, to open its eyes.' },
+  { tier: 3, name: 'The Last Bastion',       cr: 1220, hours: 12,  size: 6, flavor: 'When the horns sound from the Last Bastion, every guild answers. Send six.' },
+];
+
+const CAMPAIGNS = [
+  { name: "The Rat King's Shadow", levelHint: 'Heroes level 1–5',
+    desc: 'Something stirs beneath the city of Greywall. The rats grow bold, and large, and organized.',
+    missions: [
+      { name: 'Cellar of the Broken Cask', cr: 45,  hours: 0.5, size: 4, flavor: 'Rats the size of hounds gnaw at the brewery stores. Their eyes are far too clever.' },
+      { name: "The Miller's Lament",       cr: 70,  hours: 1,   size: 4, flavor: 'A miller swears his flour walks off at night, sack by sack, in a hundred small hands.' },
+      { name: 'Tunnels Below Greywall',    cr: 100, hours: 1.5, size: 4, flavor: 'The sewers open into older tunnels no mason of Greywall ever cut.' },
+      { name: 'Court of Whiskers',         cr: 175, hours: 2,   size: 5, flavor: 'Robed rat-priests chant before a throne of bones. They are expecting someone.' },
+      { name: 'The Rat King',              cr: 280, hours: 3,   size: 6, flavor: 'Nine tails knotted into one crown. The Rat King rises, and Greywall holds its breath.' },
+    ]},
+  { name: 'Embers of the Ashen Vale', levelHint: 'Heroes level 5–10',
+    desc: 'The Vale burned a generation ago. Now the ashes are warm again, and the Flame Cult walks openly.',
+    missions: [
+      { name: 'Scorched Homesteads',   cr: 220, hours: 2, size: 4, flavor: 'Farms burn in perfect circles. The survivors speak of laughing figures in the smoke.' },
+      { name: 'The Charcoal Forest',   cr: 260, hours: 3, size: 4, flavor: 'Blackened trees that still stand, still creak, and — some nights — still whisper.' },
+      { name: 'Kiln of the Flame Cult', cr: 305, hours: 4, size: 4, flavor: 'The cult feeds the great kiln day and night. What they are firing is not pottery.' },
+      { name: 'The Ember Gate',        cr: 440, hours: 5, size: 5, flavor: 'A door of cooling magma, opened once a century. It is opening early.' },
+      { name: 'Heart of Cinders',      cr: 600, hours: 6, size: 6, flavor: 'At the Vale’s center sleeps the ember that started it all. The cult means to wake it.' },
+    ]},
+  { name: 'The Drowned Crown', levelHint: 'Heroes level 10–15',
+    desc: 'The tide goes out farther every month, and what it uncovers should have stayed beneath the sea.',
+    missions: [
+      { name: 'Salt-Rotted Piers',   cr: 435, hours: 4, size: 4, flavor: 'Dock workers vanish at low tide. The harbormaster pays in advance now.' },
+      { name: 'The Sunken Chapel',   cr: 475, hours: 5, size: 4, flavor: 'Bells toll beneath the waves. The congregation never stopped attending.' },
+      { name: "Leviathan's Wake",    cr: 650, hours: 6, size: 5, flavor: 'Something vast passed through the bay last night. These are the things it left behind.' },
+      { name: 'Palace of Tides',     cr: 700, hours: 7, size: 5, flavor: 'Coral halls where drowned courtiers still bow to an empty throne.' },
+      { name: 'The Drowned King',    cr: 915, hours: 8, size: 6, flavor: 'He drowned with his crown on, and he has been patient. The sea gives him back.' },
+    ]},
+  { name: 'Winter of the Worldworm', levelHint: 'Heroes level 15–20',
+    desc: 'The frost comes south out of season, mile by mile. Beneath the ice, something ancient is chewing through the roots of the world.',
+    missions: [
+      { name: 'The Frostbitten March', cr: 640, hours: 6,  size: 4, flavor: 'Whole villages stand frozen mid-step, like a bell jar dropped over an afternoon.' },
+      { name: 'Howling Glacier',       cr: 680, hours: 8,  size: 4, flavor: 'The glacier moves against the wind, and the howling comes from inside it.' },
+      { name: "The Wyrm's Larder",     cr: 905, hours: 9,  size: 5, flavor: 'Caverns of blue ice, stocked with everything the Worm has swallowed for an age.' },
+      { name: 'Cathedral of Ice',      cr: 1145, hours: 10, size: 6, flavor: 'Its priests have no faces, and the hymn never resolves. Winter is a religion here.' },
+      { name: 'The Worldworm',         cr: 1215, hours: 12, size: 6, flavor: 'It has eaten the roots of mountains. Your guild’s name will be remembered — either way.' },
+    ]},
+];
+
+/* =====================================================================
+ *  RELICS
+ *  Equipable items, one per hero. Effect fields (all optional) are read
+ *  automatically by mission math; ward/revive/wardParty are handled at
+ *  resolution time. Item variety and power scale with quality tier.
+ * ===================================================================== */
+const RELIC_TIERS = {
+  common:    { name: 'Common' },
+  magic:     { name: 'Magic' },
+  rare:      { name: 'Rare' },
+  legendary: { name: 'Legendary' },
+};
+const RELIC_TIER_ORDER = ['common', 'magic', 'rare', 'legendary'];
+
+const RELICS = {
+  // --- Common: small, simple flat bonuses ---
+  dagger:     { name: 'Iron Dagger',        icon: '🗡️', tier: 'common', rating: 6,       flavor: 'A plain but reliable blade. Every little edge counts.' },
+  coin:       { name: 'Lucky Coin',         icon: '🪙', tier: 'common', gold: 0.10,      flavor: 'Heads you win. Tails you win too.' },
+  charm:      { name: 'Copper Charm',       icon: '🧿', tier: 'common', injuryReduce: 0.90, flavor: 'A cheap trinket that turns aside the worst of luck.' },
+  rations:    { name: 'Trail Rations',      icon: '🥖', tier: 'common', xp: 0.12,        flavor: 'Well-fed heroes learn a little faster. Somehow.' },
+  // --- Magic: better stats, plus the first consumable ward ---
+  silversword:{ name: 'Silvered Sword',     icon: '⚔️', tier: 'magic', rating: 13,       flavor: 'Forged to bite things that flinch from ordinary steel.' },
+  woodshield: { name: 'Wooden Shield',      icon: '🛡️', tier: 'magic', ward: 1,          flavor: 'Blocks one blow that would wound the bearer — then splinters apart.' },
+  boots:      { name: "Traveler's Boots",   icon: '👢', tier: 'magic', duration: 0.88,   flavor: 'The miles go easier, and the missions go quicker.' },
+  tome:       { name: "Apprentice's Tome",  icon: '📖', tier: 'magic', xp: 0.22,         flavor: 'Bedtime reading between the swordfights.' },
+  pouch:      { name: "Merchant's Pouch",   icon: '💰', tier: 'magic', gold: 0.22,       flavor: 'Somehow always heavier on the way home.' },
+  // --- Rare: strong stats, party-wide effects, a charged ward ---
+  runeblade:  { name: 'Runed Blade',        icon: '🗡️', tier: 'rare', rating: 24,        flavor: 'The runes hum louder the closer the fight.' },
+  bulwark:    { name: 'Bulwark Totem',      icon: '🗿', tier: 'rare', ward: 3,           flavor: 'Turns aside three wounds before its last rune cracks and it falls dark.' },
+  banner:     { name: 'Banner of Valor',    icon: '🚩', tier: 'rare', success: 0.08,     flavor: 'The whole party stands a little taller beneath it.' },
+  chalice:    { name: 'Gilded Chalice',     icon: '🏆', tier: 'rare', gold: 0.35,        flavor: 'Patrons pay more when the toast is poured from this.' },
+  amulet:     { name: 'Warding Amulet',     icon: '📿', tier: 'rare', injuryReduce: 0.55, flavor: 'Ill fortune slides off the bearer like rain off oilcloth.' },
+  signet:     { name: 'Guild Signet',       icon: '💍', tier: 'rare', partyXp: 0.15,     flavor: 'Worn by the captain; the whole party trains sharper.' },
+  // --- Legendary: build-defining, unique effects ---
+  greatblade: { name: 'Kingsteel Greatblade', icon: '⚔️', tier: 'legendary', rating: 42, flavor: 'A blade that has ended wars, waiting for the next one.' },
+  crown:      { name: 'Crown of Command',   icon: '👑', tier: 'legendary', partyRating: 32, flavor: 'Whoever wears it, the whole company fights like veterans.' },
+  phoenix:    { name: 'Phoenix Feather',    icon: '🪶', tier: 'legendary', revive: true, flavor: 'Should the bearer fall, they rise once from the ash — and the feather is spent.' },
+  aegis:      { name: 'Aegis of the Vanguard', icon: '✨', tier: 'legendary', wardParty: true, flavor: 'For one mission no blade finds the party. Then the aegis shatters, its work done.' },
+  dragonheart:{ name: 'Dragonheart',        icon: '❤️‍🔥', tier: 'legendary', rating: 26, success: 0.05, gold: 0.15, flavor: 'Still warm. The bearer and their purse both run hotter.' },
+};
+const relicsByTier = tier => Object.keys(RELICS).filter(k => RELICS[k].tier === tier);
+
+/* =====================================================================
+ *  NAME GENERATION
+ * ===================================================================== */
+const NAME_FIRST = ['Thora','Brann','Isolde','Kael','Mira','Dorn','Elara','Garrick','Nyx','Osric','Petra','Quinn','Rosalind','Sten','Talia','Ulric','Vessa','Wren','Ysolt','Zed','Astrid','Balin','Cassia','Darian','Edda','Fenwick','Gilda','Hadrian','Imogen','Jorah','Katla','Lucan','Maeve','Nils','Ophira','Percival','Runa','Sable','Tovin','Una'];
+const NAME_LAST = ['Ashveil','Blackbriar','Coppervein','Duskwalker','Emberfall','Frostmane','Grimtide','Hollowbrook','Ironquill','Kettleburn','Longshadow','Mossbane','Nightriver','Oakenshield','Palefire','Quickwater','Ravenhall','Stormcaller','Thornfield','Underbough','Veilwarden','Wolfsbane','Wyrmsong','Silvergrasp','Halloway','Marrowgate','Pyrewood','Saltmarsh'];
+
+// --- guild name generator ---
+const GUILD_ADJ = ['Iron','Silver','Golden','Crimson','Emerald','Obsidian','Ashen','Storm','Gilded','Grim','Wandering','Fabled','Ember','Frost','Shadowed','Bright','Radiant','Weary','Restless','Undaunted'];
+const GUILD_NOUN = ['Vanguard','Compact','Company','Covenant','Banner','Order','Fellowship','Brigade','Wardens','Blades','Talons','Lanterns','Accord','Hand','Pact','Watch','Coterie','League','Sentinels','Reckoning'];
+const GUILD_ELEMENT = ['Dawn','Flame','Tide','Storm','Thorn','Star','Moon','Ember','Frost','Crown','Vale','Oath'];
+const GUILD_ANIMAL = ['Griffon','Wyvern','Lion','Raven','Wolf','Stag','Basilisk','Drake','Falcon','Boar','Serpent','Bear'];
+function genGuildName() {
+  switch (rndInt(0, 2)) {
+    case 0:  return `The ${choice(GUILD_ADJ)} ${choice(GUILD_NOUN)}`;
+    case 1:  return `${choice(GUILD_NOUN)} of the ${choice(GUILD_ADJ)} ${choice(GUILD_ELEMENT)}`;
+    default: return `The ${choice(GUILD_ANIMAL)} ${choice(GUILD_NOUN)}`;
+  }
+}
+
+/* =====================================================================
+ *  STATE
+ * ===================================================================== */
+let state = null;
+
+function defaultState(now) {
+  return {
+    v: 1,
+    guildName: '',        // set during the founding modal
+    gold: CFG.STARTING_GOLD,
+    heroes: [],
+    activeMissions: [],   // {id,name,cr,start,end,heroIds,story:{c,i}|null}
+    training: [],         // {heroId,start,end}
+    rests: [],            // {heroId,start,end}
+    recruits: [],
+    recruitsExpire: 0,    // when the hire board auto-reshuffles
+    jobBoard: [],         // {id,name,cr,hours,size,flavor,tier,expires}
+    relics: [],           // {id,key,tier,equippedBy:heroId|null,charges}
+    shop: { relics: [], expires: 0 }, // the Reliquary — {key,price}[] + rotation time
+    keepLevel: 1,
+    campaigns: [0, 0, 0, 0], // missions completed per campaign
+    log: [],
+    nextId: 1,
+    lastSeen: now,
+  };
+}
+
+const rnd = (a, b) => a + Math.random() * (b - a);
+const rndInt = (a, b) => Math.floor(rnd(a, b + 1));
+const choice = arr => arr[Math.floor(Math.random() * arr.length)];
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const uid = () => state.nextId++;
+
+function genName() {
+  return choice(NAME_FIRST) + ' ' + choice(NAME_LAST);
+}
+
+function newHero(cls, level, talent) {
+  return {
+    id: uid(), name: genName(), cls,
+    level, xp: 0,
+    talent: talent != null ? talent : rndInt(0, CFG.TALENT_MAX),
+    marks: 0,
+    status: 'idle',        // idle | mission | training | resting | injured | dead
+    injuredUntil: 0,
+  };
+}
+
+function completedCampaignCount() {
+  return state.campaigns.filter(n => n >= 5).length;
+}
+
+function genRecruit() {
+  const maxLvl = Math.min(CFG.LEVEL_CAP, 1 + CFG.RECRUIT_LEVELS_PER_CAMPAIGN * completedCampaignCount());
+  const level = rndInt(1, maxLvl);
+  const h = newHero(choice(CLASS_NAMES), level);
+  h.cost = CFG.RECRUIT_COST_BASE + level * CFG.RECRUIT_COST_PER_LEVEL + h.talent * CFG.RECRUIT_COST_PER_TALENT;
+  return h;
+}
+
+function refreshRecruitPool() {
+  state.recruits = [];
+  for (let i = 0; i < CFG.RECRUIT_POOL_SIZE; i++) state.recruits.push(genRecruit());
+  state.recruitsExpire = Date.now() + rnd(CFG.RECRUIT_LIFETIME_MIN_H, CFG.RECRUIT_LIFETIME_MAX_H) * H;
+}
+
+/* ---------- job board rotation ---------- */
+// Pick a template for a tier, avoiding names already on the board and (optionally)
+// matching a predicate. Falls back gracefully if the filter is too strict.
+function genJob(tier, now, excludeNames, filter) {
+  let options = JOB_POOL.filter(j => j.tier === tier && !excludeNames.includes(j.name) && (!filter || filter(j)));
+  if (!options.length) options = JOB_POOL.filter(j => j.tier === tier && (!filter || filter(j)));
+  if (!options.length) options = JOB_POOL.filter(j => j.tier === tier);
+  const tpl = choice(options);
+  return {
+    id: uid(), name: tpl.name, cr: tpl.cr, hours: tpl.hours, size: tpl.size,
+    flavor: tpl.flavor, tier,
+    expires: now + rnd(CFG.JOB_LIFETIME_MIN_H, CFG.JOB_LIFETIME_MAX_H) * H,
+  };
+}
+
+// Guarantee the Novice board always offers one genuine beginner posting
+// (CR ≤ STARTER_CR_MAX). If none is present, swap out the hardest novice job for one.
+function ensureNoviceStarter(now) {
+  const novice = state.jobBoard.filter(j => j.tier === 0);
+  if (novice.some(j => j.cr <= CFG.STARTER_CR_MAX)) return;
+  const hardest = novice.slice().sort((a, b) => b.cr - a.cr)[0];
+  if (!hardest) return;
+  state.jobBoard = state.jobBoard.filter(j => j.id !== hardest.id);
+  const taken = state.jobBoard.filter(j => j.tier === 0).map(j => j.name);
+  state.jobBoard.push(genJob(0, now, taken, j => j.cr <= CFG.STARTER_CR_MAX));
+}
+
+// Drop expired postings and top every tier back up to JOBS_PER_TIER.
+// Returns true if the board changed.
+function refreshJobBoard(now) {
+  const before = state.jobBoard.map(j => j.id).join(',');
+  state.jobBoard = state.jobBoard.filter(j => j.expires > now);
+  for (let tier = 0; tier < JOB_TIERS.length; tier++) {
+    while (state.jobBoard.filter(j => j.tier === tier).length < CFG.JOBS_PER_TIER) {
+      const taken = state.jobBoard.filter(j => j.tier === tier).map(j => j.name);
+      state.jobBoard.push(genJob(tier, now, taken));
+    }
+  }
+  ensureNoviceStarter(now);
+  const changed = state.jobBoard.map(j => j.id).join(',') !== before;
+  if (changed) log('📋 The job board turns over — new postings are up.');
+  return changed;
+}
+
+/* ---------- relics: generation, effects, shop, equipping ---------- */
+function makeRelic(key) {
+  const t = RELICS[key];
+  return { id: uid(), key, tier: t.tier, equippedBy: null, charges: t.ward || 0 };
+}
+function randomRelic(tier) { return makeRelic(choice(relicsByTier(tier))); }
+
+// weighted random tier from a { common, magic, rare, legendary } weight map
+function weightedTier(weights) {
+  const total = RELIC_TIER_ORDER.reduce((s, t) => s + (weights[t] || 0), 0);
+  let r = Math.random() * total;
+  for (const t of RELIC_TIER_ORDER) { r -= (weights[t] || 0); if (r <= 0) return t; }
+  return 'common';
+}
+// relic-tier odds for a mission drop, based on how hard the mission is
+function tierWeightsForCR(cr) {
+  if (cr < 150) return { common: 70, magic: 28, rare: 2,  legendary: 0 };
+  if (cr < 320) return { common: 40, magic: 45, rare: 14, legendary: 1 };
+  if (cr < 550) return { common: 12, magic: 45, rare: 38, legendary: 5 };
+  if (cr < 800) return { common: 3,  magic: 27, rare: 55, legendary: 15 };
+  return              { common: 0,  magic: 12, rare: 53, legendary: 35 };
+}
+function rollRelicDrop(cr, success) {
+  const chance = CFG.RELIC_DROP_CHANCE * (success ? 1 : CFG.RELIC_FAIL_DROP_MULT);
+  if (Math.random() > chance) return null;
+  return randomRelic(weightedTier(tierWeightsForCR(cr)));
+}
+
+const heroRelic = h => (h ? state.relics.find(r => r.equippedBy === h.id) || null : null);
+function destroyRelic(id) {
+  const i = state.relics.findIndex(r => r.id === id);
+  if (i >= 0) state.relics.splice(i, 1);
+}
+// aggregate the party's equipped passive relic effects (rating/success/gold/partyXp/duration)
+function relicAgg(heroes) {
+  let rating = 0, success = 0, gold = 0, partyXp = 0, duration = 1;
+  heroes.forEach(h => {
+    const r = heroRelic(h); if (!r) return;
+    const t = RELICS[r.key];
+    rating += (t.rating || 0) + (t.partyRating || 0);
+    success += (t.success || 0);
+    gold += (t.gold || 0);
+    partyXp += (t.partyXp || 0);
+    duration *= (t.duration || 1);
+  });
+  return { rating, success, gold, partyXp, duration };
+}
+
+function equipRelic(relicId, heroId) {
+  const r = state.relics.find(x => x.id === relicId);
+  const h = heroById(heroId);
+  if (!r || !h || h.status === 'mission' || h.status === 'dead') return;
+  const cur = heroRelic(h);
+  if (cur && cur.id !== r.id) cur.equippedBy = null; // swap out the old one
+  r.equippedBy = heroId;
+  log(`🎽 ${h.name} equipped ${RELICS[r.key].icon} ${RELICS[r.key].name}.`);
+  save();
+}
+function unequipRelic(relicId) {
+  const r = state.relics.find(x => x.id === relicId);
+  if (!r || !r.equippedBy) return;
+  const h = heroById(r.equippedBy);
+  if (h && h.status === 'mission') return; // locked while on a mission
+  r.equippedBy = null;
+  save(); render();
+}
+function relicSellValue(r) { return Math.max(1, Math.round(CFG.RELIC_PRICE[r.tier] * CFG.RELIC_SELL_FRAC)); }
+function sellRelic(relicId) {
+  const r = state.relics.find(x => x.id === relicId);
+  if (!r || r.equippedBy) return; // must be unequipped
+  const val = relicSellValue(r);
+  state.gold += val;
+  destroyRelic(relicId);
+  log(`⚱ Sold ${RELICS[r.key].icon} ${RELICS[r.key].name} for ${val} gold.`);
+  save(); render();
+}
+
+/* ---------- the Reliquary (relic shop) ---------- */
+function shopTierWeights() {
+  const lvl = highestHeroLevel();
+  if (lvl < 5)  return { common: 60, magic: 35, rare: 5,  legendary: 0 };
+  if (lvl < 10) return { common: 30, magic: 45, rare: 23, legendary: 2 };
+  if (lvl < 15) return { common: 10, magic: 40, rare: 42, legendary: 8 };
+  return              { common: 2,  magic: 25, rare: 53, legendary: 20 };
+}
+function refreshShop(now) {
+  const weights = shopTierWeights();
+  const stock = [];
+  for (let i = 0; i < CFG.SHOP_STOCK_SIZE; i++) {
+    const key = choice(relicsByTier(weightedTier(weights)));
+    stock.push({ key, price: CFG.RELIC_PRICE[RELICS[key].tier] });
+  }
+  state.shop = { relics: stock, expires: now + rnd(CFG.SHOP_LIFETIME_MIN_H, CFG.SHOP_LIFETIME_MAX_H) * H };
+}
+function autoRefreshShop(now) {
+  if (state.shop && now < (state.shop.expires || 0)) return false;
+  refreshShop(now);
+  log('⚱ The Reliquary keeper lays out fresh stock.');
+  return true;
+}
+
+function initNewGame(now) {
+  state = defaultState(now);
+  // starter party: one tank, one healer, two DPS at level 1
+  state.heroes.push(newHero(choice(classesOfRole('tank')), CFG.STARTER_LEVEL));
+  state.heroes.push(newHero(choice(classesOfRole('healer')), CFG.STARTER_LEVEL));
+  state.heroes.push(newHero(choice(classesOfRole('dps')), CFG.STARTER_LEVEL));
+  state.heroes.push(newHero(choice(classesOfRole('dps')), CFG.STARTER_LEVEL));
+  refreshRecruitPool();
+  state.relics.push(makeRelic('dagger')); // a first relic to introduce the system
+  refreshShop(now);
+  log('The guild charter is signed. Four hopefuls answer the call. LFG.');
+  log('🗡️ A guild patron gifts you an Iron Dagger — equip it on the Inventory tab.');
+  refreshJobBoard(now);
+  save();
+}
+
+/* =====================================================================
+ *  SAVE / LOAD
+ * ===================================================================== */
+function save() {
+  state.lastSeen = Date.now();
+  try { localStorage.setItem(CFG.SAVE_KEY, JSON.stringify(state)); } catch (e) { /* storage unavailable */ }
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem(CFG.SAVE_KEY);
+    if (!raw) return false;
+    const s = JSON.parse(raw);
+    if (!s || s.v !== 1 || !Array.isArray(s.heroes)) return false;
+    state = s;
+    return true;
+  } catch (e) { return false; }
+}
+
+/* =====================================================================
+ *  DERIVED VALUES & RULES
+ * ===================================================================== */
+const heroById = id => state.heroes.find(h => h.id === id);
+const rosterCap = () => CFG.ROSTER_BASE + (state.keepLevel - 1) * CFG.ROSTER_PER_KEEP_LEVEL;
+const trainSlots = () => CFG.TRAIN_SLOTS_BASE + (state.keepLevel - 1) * CFG.TRAIN_SLOTS_PER_KEEP_LEVEL;
+const livingHeroes = () => state.heroes.filter(h => h.status !== 'dead');
+const idleHeroes = () => state.heroes.filter(h => h.status === 'idle');
+const highestHeroLevel = () => livingHeroes().reduce((m, h) => Math.max(m, h.level), 0);
+// a job tier is visible once the guild's best hero clears its minimum level
+const jobTierUnlocked = tier => highestHeroLevel() >= (CFG.JOB_TIER_MIN_LEVEL[tier] || 1);
+
+const xpToNext = lvl => CFG.XP_PER_LEVEL_STEP * lvl;
+const heroRating = h => h.level * CFG.RATING_PER_LEVEL + h.talent;
+const countClass = (heroes, cls) => heroes.filter(h => h.cls === cls).length;
+
+function partyRating(heroes) {
+  let r = heroes.reduce((s, h) => s + heroRating(h), 0);
+  r += countClass(heroes, 'Sorcerer') * CFG.SORCERER_RATING_BONUS;
+  r += relicAgg(heroes).rating;
+  return r;
+}
+
+function successChance(heroes, cr) {
+  const r = partyRating(heroes);
+  let p = CFG.SUCCESS_BASE + (r / cr - 1) * CFG.SUCCESS_SLOPE;
+  p += countClass(heroes, 'Fighter') * CFG.FIGHTER_SUCCESS_BONUS;
+  if (cr > r) p += countClass(heroes, 'Wizard') * CFG.WIZARD_UNDERDOG_BONUS;
+  p += relicAgg(heroes).success;
+  return clamp(p, CFG.SUCCESS_MIN, CFG.SUCCESS_MAX);
+}
+
+// per-hero injury chance for a given hero in a given party & outcome
+function injuryChance(heroes, hero, cr, failed) {
+  const r = partyRating(heroes);
+  let p = CFG.INJURY_BASE + (cr / r - 1) * CFG.INJURY_SLOPE;
+  p = clamp(p, CFG.INJURY_MIN, CFG.INJURY_MAX);
+  p *= Math.pow(CFG.PALADIN_INJURY_MULT, countClass(heroes, 'Paladin'));
+  if (failed) p *= CFG.FAIL_INJURY_MULT;
+  if (hero.cls === 'Barbarian') p *= CFG.BARBARIAN_INJURY_MULT;
+  if (hero.cls === 'Monk' && !failed) p = 0;
+  const rel = heroRelic(hero); if (rel) p *= (RELICS[rel.key].injuryReduce || 1);
+  return clamp(p, 0, 0.95);
+}
+
+function missionDurationMs(hours, heroes) {
+  return hours * H * Math.pow(CFG.RANGER_DURATION_MULT, countClass(heroes, 'Ranger')) * relicAgg(heroes).duration;
+}
+
+// failed-mission payout fraction, improved by Druids (Nature's Bounty)
+function failFraction(baseFrac, heroes) {
+  const f = baseFrac * Math.pow(CFG.DRUID_SALVAGE_MULT, countClass(heroes, 'Druid'));
+  return Math.min(CFG.DRUID_SALVAGE_CAP, f);
+}
+
+// +X% gold & XP per hero beyond the 4-hero core
+function partySizeBonus(heroes) {
+  return 1 + Math.max(0, heroes.length - 4) * CFG.PARTY_SIZE_REWARD_BONUS;
+}
+
+function missionGoldReward(cr, story, heroes, success) {
+  let g = cr * CFG.GOLD_PER_CR * (story ? CFG.STORY_REWARD_MULT : 1);
+  g *= 1 + (countClass(heroes, 'Bard') * CFG.BARD_GOLD_BONUS + countClass(heroes, 'Rogue') * CFG.ROGUE_GOLD_BONUS + relicAgg(heroes).gold);
+  g *= partySizeBonus(heroes);
+  if (!success) g *= failFraction(CFG.FAIL_GOLD_FRAC, heroes);
+  return Math.round(g);
+}
+
+function missionXpReward(cr, story, heroes, hero, success) {
+  let x = cr * CFG.XP_PER_CR * (story ? CFG.STORY_REWARD_MULT : 1);
+  x *= 1 + countClass(heroes, 'Warlock') * CFG.WARLOCK_XP_BONUS + relicAgg(heroes).partyXp;
+  x *= partySizeBonus(heroes);
+  if (hero.cls === 'Barbarian') x *= CFG.BARBARIAN_XP_MULT;
+  const rel = heroRelic(hero); if (rel) x *= 1 + (RELICS[rel.key].xp || 0);
+  if (!success) x *= failFraction(CFG.FAIL_XP_FRAC, heroes);
+  return Math.round(x);
+}
+
+function gainXP(hero, amount) {
+  if (hero.status === 'dead' || hero.level >= CFG.LEVEL_CAP) return;
+  hero.xp += amount;
+  while (hero.level < CFG.LEVEL_CAP && hero.xp >= xpToNext(hero.level)) {
+    hero.xp -= xpToNext(hero.level);
+    hero.level++;
+    log(`⭐ ${hero.name} the ${hero.cls} reached level ${hero.level}.`);
+  }
+  if (hero.level >= CFG.LEVEL_CAP) hero.xp = 0;
+}
+
+function infirmaryCost(hero) {
+  return CFG.INFIRMARY_BASE_COST + hero.level * CFG.INFIRMARY_COST_PER_LEVEL;
+}
+
+function log(msg) {
+  state.log.push({ t: Date.now(), msg });
+  if (state.log.length > CFG.LOG_LIMIT) state.log.splice(0, state.log.length - CFG.LOG_LIMIT);
+}
+
+/* =====================================================================
+ *  ACTIONS
+ * ===================================================================== */
+function startMission(def, heroIds, story) {
+  const heroes = heroIds.map(heroById);
+  const now = Date.now();
+  const dur = missionDurationMs(def.hours, heroes);
+  const m = {
+    id: uid(), name: def.name, cr: def.cr, flavor: def.flavor,
+    start: now, end: now + dur, heroIds: heroIds.slice(), story: story || null,
+  };
+  heroes.forEach(h => h.status = 'mission');
+  state.activeMissions.push(m);
+  log(`⚔ A party set out on “${def.name}” (CR ${def.cr}).`);
+  save();
+}
+
+function resolveMission(m, endTime) {
+  const heroes = m.heroIds.map(heroById).filter(Boolean);
+  const cr = m.cr, story = !!m.story;
+  const success = Math.random() < successChance(heroes, cr);
+
+  const gold = missionGoldReward(cr, story, heroes, success);
+  state.gold += gold;
+
+  const clerics = countClass(heroes, 'Cleric');
+  const recoveryMs = CFG.INJURY_DURATION_H * H * Math.pow(CFG.CLERIC_RECOVERY_MULT, clerics);
+
+  // Aegis: any wardParty relic shields the whole party from injury this mission,
+  // then is consumed regardless of whether anyone would have been hurt.
+  const relicEvents = [], consumed = [];
+  const partyShielded = heroes.some(h => { const r = heroRelic(h); return r && RELICS[r.key].wardParty; });
+  if (partyShielded) heroes.forEach(h => {
+    const r = heroRelic(h);
+    if (r && RELICS[r.key].wardParty) { consumed.push(r.id); relicEvents.push({ type: 'aegis', name: h.name, relic: RELICS[r.key].name }); }
+  });
+
+  const hurt = [], fallen = [], leveled = [];
+  heroes.forEach(h => {
+    const lvlBefore = h.level;
+    gainXP(h, missionXpReward(cr, story, heroes, h, success));
+    if (h.level > lvlBefore) leveled.push({ name: h.name, cls: h.cls, level: h.level });
+
+    const wouldBeInjured = Math.random() < injuryChance(heroes, h, cr, !success);
+    if (!wouldBeInjured || partyShielded) { if (h.status === 'mission') h.status = 'idle'; return; }
+
+    const rel = heroRelic(h);
+    // consumable ward absorbs the wound
+    if (rel && RELICS[rel.key].ward && rel.charges > 0) {
+      rel.charges--;
+      relicEvents.push({ type: 'block', name: h.name, relic: RELICS[rel.key].name });
+      if (rel.charges <= 0) { consumed.push(rel.id); relicEvents.push({ type: 'break', name: h.name, relic: RELICS[rel.key].name }); }
+      if (h.status === 'mission') h.status = 'idle';
+      return;
+    }
+    // a real wound
+    h.marks++;
+    if (h.marks >= CFG.MAX_MARKS) {
+      if (rel && RELICS[rel.key].revive) { // Phoenix Feather cheats death, then breaks
+        h.marks = CFG.MAX_MARKS - 1;
+        h.status = 'injured';
+        h.injuredUntil = endTime + recoveryMs;
+        hurt.push(h.name);
+        consumed.push(rel.id);
+        relicEvents.push({ type: 'revive', name: h.name, relic: RELICS[rel.key].name });
+      } else {
+        const dr = heroRelic(h); if (dr) dr.equippedBy = null; // fallen hero's relic returns to inventory
+        h.status = 'dead';
+        fallen.push(h.name);
+      }
+    } else {
+      h.status = 'injured';
+      h.injuredUntil = endTime + recoveryMs;
+      hurt.push(h.name);
+    }
+  });
+
+  consumed.forEach(id => destroyRelic(id));
+  state.activeMissions = state.activeMissions.filter(x => x.id !== m.id);
+
+  // relic loot & campaign rewards
+  const drops = [];
+  const loot = rollRelicDrop(cr, success);
+  if (loot) { state.relics.push(loot); drops.push(loot); }
+
+  let campaignComplete = null, campaignNext = null;
+  if (success && m.story) {
+    const c = m.story.c, i = m.story.i;
+    if (state.campaigns[c] === i) {
+      state.campaigns[c] = i + 1;
+      const reward = randomRelic(weightedTier(CFG.CAMPAIGN_RELIC_WEIGHTS[c])); // first-clear reward
+      state.relics.push(reward); drops.push(reward);
+      if (state.campaigns[c] === 5) {
+        campaignComplete = CAMPAIGNS[c].name;
+        campaignNext = c + 1 < CAMPAIGNS.length ? CAMPAIGNS[c + 1].name : null;
+        const legend = randomRelic('legendary'); // campaign completion bonus
+        state.relics.push(legend); drops.push(legend);
+        log(`🏆 Campaign complete: “${campaignComplete}”!` + (campaignNext ? ` “${campaignNext}” is now open.` : ' Your guild’s legend is complete.'));
+      }
+    }
+  }
+
+  const per = heroes.length ? missionXpReward(cr, story, heroes, heroes.find(h => h.cls !== 'Barbarian') || heroes[0], success) : 0;
+  log(`${success ? '✅ Victory' : '❌ Failure'} — “${m.name}”: +${gold} gold, ~${per} XP each.`);
+  relicEvents.forEach(ev => log(relicEventLog(ev)));
+  hurt.forEach(n => log(`🩹 ${n} was injured (out ${fmtDur(recoveryMs)}, +1 mark).`));
+  fallen.forEach(n => log(`☠ ${n} has died of their wounds. The guild will remember.`));
+  drops.forEach(d => log(`🎁 Relic acquired: ${RELICS[d.key].icon} ${RELICS[d.key].name} (${RELIC_TIERS[d.tier].name}).`));
+
+  // queue a briefing for the player to read when they next look at the screen
+  ui.briefings.push({
+    name: m.name, story, success, gold, xpEach: per,
+    partySize: heroes.length,
+    recoveryTxt: fmtDur(recoveryMs),
+    injured: hurt.slice(), fallen: fallen.slice(), leveled,
+    relicEvents, relicDrops: drops.map(d => ({ name: RELICS[d.key].name, icon: RELICS[d.key].icon, tier: d.tier })),
+    campaignComplete, campaignNext,
+  });
+}
+
+function relicEventLog(ev) {
+  switch (ev.type) {
+    case 'block':  return `🛡️ ${ev.name}'s ${ev.relic} turned aside a wound.`;
+    case 'break':  return `💥 ${ev.name}'s ${ev.relic} shattered, its charges spent.`;
+    case 'revive': return `🪶 ${ev.name} fell — but ${ev.relic} burned away and pulled them back.`;
+    case 'aegis':  return `✨ ${ev.relic} shielded the whole party, then broke.`;
+  }
+  return '';
+}
+
+function assignTraining(heroId) {
+  if (state.training.length >= trainSlots()) return;
+  const h = heroById(heroId);
+  if (!h || h.status !== 'idle') return;
+  const now = Date.now();
+  h.status = 'training';
+  state.training.push({ heroId, start: now, end: now + CFG.TRAINING_CAP_H * H });
+  log(`🎓 ${h.name} began training at the Keep.`);
+  save();
+}
+
+function trainingXpSoFar(t, now) {
+  const elapsed = Math.min(now, t.end) - t.start;
+  return Math.floor((elapsed / H) * CFG.TRAINING_XP_PER_HOUR);
+}
+
+function finishTraining(t, endTime) {
+  const h = heroById(t.heroId);
+  const xp = trainingXpSoFar(t, endTime);
+  state.training = state.training.filter(x => x !== t);
+  if (h && h.status === 'training') {
+    h.status = 'idle';
+    gainXP(h, xp);
+    log(`🎓 ${h.name} finished training (+${xp} XP).`);
+  }
+}
+
+function recallTraining(heroId) {
+  const t = state.training.find(x => x.heroId === heroId);
+  if (t) { finishTraining(t, Date.now()); save(); render(); }
+}
+
+function assignRest(heroId) {
+  const h = heroById(heroId);
+  if (!h || h.status !== 'idle' || h.marks <= 0) return;
+  const now = Date.now();
+  h.status = 'resting';
+  state.rests.push({ heroId, start: now, end: now + CFG.REST_DURATION_H * H });
+  log(`🛌 ${h.name} was sent to rest and recover.`);
+  save();
+}
+
+function finishRest(r) {
+  const h = heroById(r.heroId);
+  state.rests = state.rests.filter(x => x !== r);
+  if (h && h.status === 'resting') {
+    h.status = 'idle';
+    h.marks = Math.max(0, h.marks - 1);
+    log(`🛌 ${h.name} is fully rested — one injury mark removed.`);
+  }
+}
+
+function cancelRest(heroId) {
+  const r = state.rests.find(x => x.heroId === heroId);
+  const h = heroById(heroId);
+  if (r) {
+    state.rests = state.rests.filter(x => x !== r);
+    if (h && h.status === 'resting') h.status = 'idle';
+    log(`${h ? h.name : 'A hero'} cut their rest short — no mark removed.`);
+    save(); render();
+  }
+}
+
+function healMark(heroId) {
+  const h = heroById(heroId);
+  if (!h || h.marks <= 0 || h.status === 'dead') return;
+  const cost = infirmaryCost(h);
+  if (state.gold < cost) return;
+  state.gold -= cost;
+  h.marks--;
+  log(`⚕ The Infirmary treated ${h.name} for ${cost} gold — one mark removed.`);
+  save(); render();
+}
+
+function recruitHero(idx) {
+  const r = state.recruits[idx];
+  if (!r) return;
+  if (livingHeroes().length >= rosterCap()) return;
+  if (state.gold < r.cost) return;
+  state.gold -= r.cost;
+  state.recruits.splice(idx, 1);
+  const cost = r.cost;
+  delete r.cost;
+  state.heroes.push(r);
+  log(`🍺 Recruited ${r.name}, level ${r.level} ${r.cls}, for ${cost} gold.`);
+  save(); render();
+}
+
+function payRefreshRecruits() {
+  if (state.gold < CFG.RECRUIT_REFRESH_COST) return;
+  state.gold -= CFG.RECRUIT_REFRESH_COST;
+  refreshRecruitPool();
+  log(`🍺 New faces drift into the Tavern.`);
+  save(); render();
+}
+
+// Auto-reshuffle the hire board on its own timer (called from tick/boot).
+function autoRefreshRecruits(now) {
+  if (now < (state.recruitsExpire || 0)) return false;
+  refreshRecruitPool();
+  log('🍺 The old hopefuls wander off; new adventurers arrive at the Tavern.');
+  return true;
+}
+
+function foundGuild(name) {
+  const clean = (name || '').trim().slice(0, 40) || genGuildName();
+  state.guildName = clean;
+  log(`🏰 The ${clean} is founded. May its name outlive us all.`);
+  save();
+}
+
+function renameGuild(name) {
+  const clean = (name || '').trim().slice(0, 40);
+  if (!clean || clean === state.guildName) return false;
+  if (state.gold < CFG.GUILD_RENAME_COST) return false;
+  state.gold -= CFG.GUILD_RENAME_COST;
+  const old = state.guildName;
+  state.guildName = clean;
+  log(`🏰 “${old}” is now known as “${clean}” (${CFG.GUILD_RENAME_COST} gold in new banners and seals).`);
+  save();
+  return true;
+}
+
+// Remove a hero from the guild entirely (not death — a dismissal).
+function dismissHero(heroId) {
+  const h = heroById(heroId);
+  if (!h) return;
+  if (['mission', 'training', 'resting'].includes(h.status)) return; // must be free
+  const rel = heroRelic(h); if (rel) rel.equippedBy = null; // relic stays with the guild
+  state.heroes = state.heroes.filter(x => x.id !== heroId);
+  log(`👋 ${h.name} the ${h.cls} was dismissed from the guild.`);
+  save();
+}
+
+/* ---------- backup & restore ---------- */
+// The current save as a JSON string (flushes state to storage first).
+function exportSaveText() {
+  save();
+  return localStorage.getItem(CFG.SAVE_KEY) || JSON.stringify(state);
+}
+
+// Validate & adopt an imported save string. Returns { ok, msg }.
+// Runs the same normalization/offline-catch-up as boot so any save loads cleanly.
+function applyImport(text) {
+  let s;
+  try { s = JSON.parse(text); }
+  catch (e) { return { ok: false, msg: 'That is not valid save text.' }; }
+  if (!s || typeof s !== 'object' || s.v !== 1 || !Array.isArray(s.heroes)) {
+    return { ok: false, msg: 'This does not look like an LFG save.' };
+  }
+  state = s;
+  const now = Date.now();
+  // normalize / migrate, mirroring boot()
+  if (!Array.isArray(state.jobBoard)) state.jobBoard = [];
+  if (typeof state.guildName !== 'string') state.guildName = '';
+  if (typeof state.gold !== 'number') state.gold = 0;
+  if (!Array.isArray(state.relics)) state.relics = [];
+  if (!state.shop || !Array.isArray(state.shop.relics)) state.shop = { relics: [], expires: 0 };
+  if (!state.nextId) state.nextId = Math.max(0, ...state.heroes.map(h => h.id || 0)) + 1;
+  processEvents(now);
+  if (!Array.isArray(state.recruits) || !state.recruits.length) refreshRecruitPool();
+  autoRefreshRecruits(now);
+  autoRefreshShop(now);
+  if (!state.shop.relics.length) refreshShop(now);
+  refreshJobBoard(now);
+  ui.briefings = [];                 // this is a deliberate load, not a return-from-away
+  if (!state.guildName) ui.naming = 'found';
+  save();
+  log('📥 Save data imported.');
+  return { ok: true };
+}
+
+// Update a small status line inside a modal without re-rendering (preserves textareas).
+function setStatus(id, msg, isErr) {
+  const el = $(id);
+  if (el) { el.textContent = msg; el.className = 'sub ' + (isErr ? 'red' : 'green'); }
+}
+
+function upgradeKeep() {
+  if (state.keepLevel >= CFG.KEEP_MAX_LEVEL) return;
+  const cost = CFG.KEEP_UPGRADE_COSTS[state.keepLevel - 1];
+  if (state.gold < cost) return;
+  state.gold -= cost;
+  state.keepLevel++;
+  log(`🏰 The Keep was expanded to level ${state.keepLevel}. Roster cap ${rosterCap()}, training slots ${trainSlots()}.`);
+  save(); render();
+}
+
+/* =====================================================================
+ *  TIME & OFFLINE RESOLUTION
+ *  Everything pending is processed in chronological order so log
+ *  entries and knock-on effects (e.g. injuries from a mission that
+ *  ended hours ago) resolve correctly.
+ * ===================================================================== */
+function pendingEvents(now) {
+  const ev = [];
+  state.activeMissions.forEach(m => { if (m.end <= now) ev.push({ t: m.end, fn: () => resolveMission(m, m.end) }); });
+  state.training.forEach(t => { if (t.end <= now) ev.push({ t: t.end, fn: () => finishTraining(t, t.end) }); });
+  state.rests.forEach(r => { if (r.end <= now) ev.push({ t: r.end, fn: () => finishRest(r) }); });
+  state.heroes.forEach(h => {
+    if (h.status === 'injured' && h.injuredUntil <= now) {
+      ev.push({ t: h.injuredUntil, fn: () => { h.status = 'idle'; log(`💪 ${h.name} has recovered and is ready for duty.`); } });
+    }
+  });
+  return ev;
+}
+
+function processEvents(now) {
+  let count = 0;
+  for (;;) {
+    const ev = pendingEvents(now);
+    if (!ev.length) break;
+    ev.sort((a, b) => a.t - b.t);
+    ev[0].fn();
+    count++;
+    if (count > 500) break; // safety valve
+  }
+  if (count) save();
+  return count;
+}
+
+/* =====================================================================
+ *  FORMATTING
+ * ===================================================================== */
+function fmtDur(ms) {
+  ms = Math.max(0, ms);
+  const s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  return `${m}:${String(sec).padStart(2, '0')}`;
+}
+function fmtHours(hours) {
+  if (hours >= 1) return (hours % 1 === 0 ? hours : hours.toFixed(1)) + 'h';
+  return Math.round(hours * 60) + 'm';
+}
+function fmtWhen(t) {
+  const d = new Date(t);
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' +
+         d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+function chanceClass(p) { return p >= 0.75 ? 'green' : p >= 0.45 ? 'yellow' : 'red'; }
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+/* =====================================================================
+ *  UI STATE & RENDERING
+ * ===================================================================== */
+const ui = {
+  view: 'keep',
+  picker: null,       // { def, story } mission being staffed
+  picked: [],         // hero ids selected in party picker
+  heroPicker: null,   // 'train' | 'rest'
+  drawer: false,
+  awayMsgs: null,
+  briefings: [],      // queued mission-result briefings to show one at a time
+  naming: null,       // 'found' | 'rename' — guild name modal
+  confirmDismiss: null, // heroId awaiting dismissal confirmation
+  dataModal: false,   // backup & restore panel
+  equipRelic: null,   // relicId being assigned to a hero (Inventory → hero)
+  equipHero: null,    // heroId choosing a relic (Roster → relic)
+};
+
+const $ = id => document.getElementById(id);
+
+function setView(v) { ui.view = v; render(); }
+
+function render() {
+  renderHeader();
+  renderNav();
+  const views = { keep: renderKeep, tavern: renderTavern, reliquary: renderReliquary, campaigns: renderCampaigns, roster: renderRoster, inventory: renderInventory };
+  $('view').innerHTML = views[ui.view]();
+  renderModal();
+  renderDrawer();
+}
+
+function renderHeader() {
+  const chips = [];
+  state.activeMissions.forEach(m => chips.push(`<span class="chip">⚔ <b>${esc(m.name)}</b> <span class="cd" data-cd="${m.end}"></span></span>`));
+  state.training.forEach(t => { const h = heroById(t.heroId); if (h) chips.push(`<span class="chip">🎓 <b>${esc(h.name.split(' ')[0])}</b> <span class="cd" data-cd="${t.end}"></span></span>`); });
+  state.rests.forEach(r => { const h = heroById(r.heroId); if (h) chips.push(`<span class="chip">🛌 <b>${esc(h.name.split(' ')[0])}</b> <span class="cd" data-cd="${r.end}"></span></span>`); });
+  state.heroes.forEach(h => { if (h.status === 'injured') chips.push(`<span class="chip">🩹 <b>${esc(h.name.split(' ')[0])}</b> <span class="cd" data-cd="${h.injuredUntil}"></span></span>`); });
+  $('header').innerHTML = `
+    <div class="brand">⚜ LFG<small>${state.guildName ? esc(state.guildName) : 'guildmaster'}</small></div>
+    <div class="goldbox">🪙 ${state.gold}</div>
+    <div class="timers">${chips.join('') || '<span class="chip">All quiet — everyone is home.</span>'}</div>
+    <button class="ghost" onclick="A.toggleDrawer()">📜 Chronicle</button>`;
+}
+
+function renderNav() {
+  const tabs = [['keep', '🏰 Keep'], ['tavern', '🍺 Tavern'], ['reliquary', '⚱ Reliquary'], ['campaigns', '📖 Campaigns'], ['roster', '🗡 Roster'], ['inventory', '🎒 Inventory']];
+  $('nav').innerHTML = tabs.map(([k, label]) =>
+    `<button class="${ui.view === k ? 'active' : ''}" onclick="A.setView('${k}')">${label}</button>`).join('');
+}
+
+/* ---------- hero card bits ---------- */
+function marksHtml(h) {
+  let s = '';
+  for (let i = 0; i < CFG.MAX_MARKS; i++) s += i < h.marks ? '<span class="red">●</span>' : '<span style="color:#4a4234">○</span>';
+  return `<span class="marks" title="Injury marks — ${CFG.MAX_MARKS} means death">${s}</span>`;
+}
+
+function heroStatusHtml(h) {
+  switch (h.status) {
+    case 'idle': return '<span class="green">Ready</span>';
+    case 'mission': {
+      const m = state.activeMissions.find(m => m.heroIds.includes(h.id));
+      return m ? `<span class="blue">On “${esc(m.name)}”</span> <span class="cd" data-cd="${m.end}"></span>` : 'On a mission';
+    }
+    case 'training': {
+      const t = state.training.find(t => t.heroId === h.id);
+      return t ? `<span class="blue">Training</span> <span class="cd" data-cd="${t.end}"></span>` : 'Training';
+    }
+    case 'resting': {
+      const r = state.rests.find(r => r.heroId === h.id);
+      return r ? `<span class="yellow">Resting</span> <span class="cd" data-cd="${r.end}"></span>` : 'Resting';
+    }
+    case 'injured': return `<span class="red">Injured</span> <span class="cd" data-cd="${h.injuredUntil}"></span>`;
+    case 'dead': return '<span class="red">☠ Fallen</span>';
+  }
+  return h.status;
+}
+
+function heroCard(h, actions) {
+  const c = CLASSES[h.cls];
+  const need = xpToNext(h.level);
+  const xpBar = h.level >= CFG.LEVEL_CAP
+    ? '<div class="sub">Max level</div>'
+    : `<div class="bar"><div style="width:${Math.min(100, h.xp / need * 100)}%"></div></div>
+       <div class="sub">${h.xp} / ${need} XP</div>`;
+  return `<div class="card">
+    <div class="spread">
+      <div><b>${esc(h.name)}</b> <span class="sub">Lv ${h.level}</span></div>
+      <div><span class="tag ${c.role}">${ROLE_ICON[c.role]} ${h.cls}</span></div>
+    </div>
+    <div class="spread" style="margin-top:2px">
+      <span class="sub">Rating <b class="gold-t">${heroRating(h)}</b> · Talent +${h.talent}</span>
+      ${marksHtml(h)}
+    </div>
+    ${xpBar}
+    <div style="margin:4px 0">${heroStatusHtml(h)}</div>
+    <div class="ability"><b>${c.aName}:</b> ${c.aDesc()}</div>
+    ${relicLineHtml(h)}
+    ${actions ? `<div class="row" style="margin-top:8px">${actions}</div>` : ''}
+  </div>`;
+}
+
+// one-line summary of a hero's equipped relic (or nothing)
+function relicLineHtml(h) {
+  const r = heroRelic(h);
+  if (!r) return '';
+  const t = RELICS[r.key];
+  const ch = t.ward ? ` <span class="sub">(${r.charges}/${t.ward})</span>` : '';
+  return `<div class="ability"><span class="${'q-' + r.tier}">${t.icon} ${esc(t.name)}</span>${ch} — <span class="sub">${relicEffectText(r.key)}</span></div>`;
+}
+
+function heroActions(h) {
+  const acts = [];
+  if (h.status === 'idle') {
+    if (state.training.length < trainSlots())
+      acts.push(`<button class="act" onclick="A.assignTraining(${h.id})">🎓 Train</button>`);
+    if (h.marks > 0)
+      acts.push(`<button class="act" onclick="A.assignRest(${h.id})">🛌 Rest (${CFG.REST_DURATION_H}h)</button>`);
+  }
+  if (h.status === 'training')
+    acts.push(`<button class="ghost" onclick="A.recallTraining(${h.id})">Recall from training</button>`);
+  if (h.status === 'resting')
+    acts.push(`<button class="ghost" onclick="A.cancelRest(${h.id})">Cancel rest (no benefit)</button>`);
+  if (h.marks > 0 && h.status !== 'dead') {
+    const cost = infirmaryCost(h);
+    acts.push(`<button class="act" ${state.gold < cost ? 'disabled' : ''} onclick="A.healMark(${h.id})">⚕ Heal mark — ${cost}g</button>`);
+  }
+  // relic management is allowed unless the hero is out on a mission
+  if (h.status !== 'mission' && h.status !== 'dead') {
+    acts.push(`<button class="ghost" onclick="A.openEquipHero(${h.id})">${heroRelic(h) ? '🎽 Change relic' : '🎽 Equip relic'}</button>`);
+  }
+  // can dismiss only heroes who aren't currently committed to something
+  if (h.status === 'idle' || h.status === 'injured') {
+    acts.push(`<button class="ghost" onclick="A.askDismiss(${h.id})">👋 Dismiss</button>`);
+  }
+  return acts.join('');
+}
+
+/* ---------- relic display helpers ---------- */
+function relicEffectText(key) {
+  const t = RELICS[key], bits = [];
+  if (t.rating) bits.push(`+${t.rating} rating`);
+  if (t.partyRating) bits.push(`+${t.partyRating} party rating`);
+  if (t.success) bits.push(`+${pct(t.success)} party success`);
+  if (t.gold) bits.push(`+${pct(t.gold)} mission gold`);
+  if (t.xp) bits.push(`+${pct(t.xp)} bearer XP`);
+  if (t.partyXp) bits.push(`+${pct(t.partyXp)} party XP`);
+  if (t.injuryReduce) bits.push(`−${pct(1 - t.injuryReduce)} bearer injury chance`);
+  if (t.duration) bits.push(`−${pct(1 - t.duration)} mission duration`);
+  if (t.ward) bits.push(`blocks ${t.ward} injur${t.ward > 1 ? 'ies' : 'y'}, then breaks`);
+  if (t.revive) bits.push('survives a lethal wound once, then breaks');
+  if (t.wardParty) bits.push('whole party immune to injury for one mission, then breaks');
+  return bits.join(' · ');
+}
+function relicCard(r, actions, opts) {
+  const t = RELICS[r.key];
+  const bearer = r.equippedBy ? heroById(r.equippedBy) : null;
+  const ch = t.ward ? ` <span class="sub">(${r.charges}/${t.ward} charges)</span>` : '';
+  const glow = t.tier === 'legendary' ? ' legendary-glow' : '';
+  return `<div class="card${glow}">
+    <div class="spread">
+      <b class="${'q-' + t.tier}">${t.icon} ${esc(t.name)}</b>
+      <span class="tag q-${t.tier}">${RELIC_TIERS[t.tier].name}</span>
+    </div>
+    <div class="ability">${relicEffectText(r.key)}${ch}</div>
+    <div class="flavor">${esc(t.flavor)}</div>
+    ${opts && opts.hideBearer ? '' : (bearer ? `<div class="sub">Equipped by <b>${esc(bearer.name)}</b></div>` : '<div class="sub">Unequipped</div>')}
+    ${actions ? `<div class="row" style="margin-top:8px">${actions}</div>` : ''}
+  </div>`;
+}
+
+/* ---------- Keep ---------- */
+function renderKeep() {
+  const lvl = state.keepLevel;
+  const nextCost = lvl < CFG.KEEP_MAX_LEVEL ? CFG.KEEP_UPGRADE_COSTS[lvl - 1] : null;
+  let html = `<h2>🏰 The Keep — Level ${lvl}</h2>
+  <div class="card">
+    <div class="spread" style="margin-bottom:8px">
+      <div>Guild: <b class="gold-t">${state.guildName ? esc(state.guildName) : 'Unnamed'}</b></div>
+      <div class="row">
+        <button class="ghost" onclick="A.openRename()">✍ Rename guild — ${CFG.GUILD_RENAME_COST}g</button>
+        <button class="ghost" onclick="A.openData()">💾 Backup / Restore</button>
+      </div>
+    </div>
+    <hr class="thin">
+    <div class="spread">
+      <div>
+        <div>Roster capacity: <b>${livingHeroes().length} / ${rosterCap()}</b> heroes</div>
+        <div>Training slots: <b>${state.training.length} / ${trainSlots()}</b> in use</div>
+      </div>
+      <div style="text-align:right">
+        ${nextCost !== null
+          ? `<div class="sub">Level ${lvl + 1}: +${CFG.ROSTER_PER_KEEP_LEVEL} roster, +${CFG.TRAIN_SLOTS_PER_KEEP_LEVEL} training slot</div>
+             <button class="act" ${state.gold < nextCost ? 'disabled' : ''} onclick="A.upgradeKeep()">Upgrade Keep — ${nextCost}g</button>`
+          : '<div class="sub">The Keep stands at its full glory.</div>'}
+      </div>
+    </div>
+  </div>`;
+
+  // training
+  html += `<h3>🎓 Training Yard <span class="sub">(${CFG.TRAINING_XP_PER_HOUR} XP/hour, sessions end after ${CFG.TRAINING_CAP_H}h — the safe, slow path)</span></h3>`;
+  const now = Date.now();
+  state.training.forEach(t => {
+    const h = heroById(t.heroId);
+    if (!h) return;
+    html += `<div class="card"><div class="spread">
+      <div><b>${esc(h.name)}</b> <span class="sub">Lv ${h.level} ${h.cls}</span> — earned <b class="blue">${trainingXpSoFar(t, now)} XP</b> so far</div>
+      <div class="row"><span class="cd" data-cd="${t.end}"></span>
+      <button class="ghost" onclick="A.recallTraining(${h.id})">Recall</button></div>
+    </div></div>`;
+  });
+  for (let i = state.training.length; i < trainSlots(); i++) {
+    html += `<div class="card"><div class="spread"><span class="empty">Empty training slot</span>
+      <button class="act" ${idleHeroes().length ? '' : 'disabled'} onclick="A.openHeroPicker('train')">Assign hero</button></div></div>`;
+  }
+
+  // rest
+  html += `<h3>🛌 Barracks <span class="sub">(${CFG.REST_DURATION_H}h of rest — removes one injury mark, earns nothing)</span></h3>`;
+  if (state.rests.length === 0) html += '<div class="empty">No one is resting.</div>';
+  state.rests.forEach(r => {
+    const h = heroById(r.heroId);
+    if (!h) return;
+    html += `<div class="card"><div class="spread">
+      <div><b>${esc(h.name)}</b> <span class="sub">Lv ${h.level} ${h.cls}</span> ${marksHtml(h)}</div>
+      <div class="row"><span class="cd" data-cd="${r.end}"></span>
+      <button class="ghost" onclick="A.cancelRest(${h.id})">Cancel</button></div>
+    </div></div>`;
+  });
+  const restable = idleHeroes().filter(h => h.marks > 0);
+  html += `<div style="margin:6px 0 0"><button class="act" ${restable.length ? '' : 'disabled'} onclick="A.openHeroPicker('rest')">Send a hero to rest</button>
+    ${restable.length ? '' : '<span class="sub"> — no idle heroes carry injury marks</span>'}</div>`;
+
+  // infirmary
+  html += `<h3>⚕ Infirmary <span class="sub">(pay gold to remove a mark instantly — ${CFG.INFIRMARY_BASE_COST}g + ${CFG.INFIRMARY_COST_PER_LEVEL}g per hero level)</span></h3>`;
+  const marked = state.heroes.filter(h => h.status !== 'dead' && h.marks > 0);
+  if (!marked.length) html += '<div class="empty">No heroes carry injury marks. The Infirmary is quiet.</div>';
+  marked.forEach(h => {
+    const cost = infirmaryCost(h);
+    html += `<div class="card"><div class="spread">
+      <div><b>${esc(h.name)}</b> <span class="sub">Lv ${h.level} ${h.cls}</span> ${marksHtml(h)}
+        ${h.marks === CFG.MAX_MARKS - 1 ? '<span class="red"> — one wound from death!</span>' : ''}</div>
+      <button class="act" ${state.gold < cost ? 'disabled' : ''} onclick="A.healMark(${h.id})">Heal one mark — ${cost}g</button>
+    </div></div>`;
+  });
+  return html;
+}
+
+/* ---------- Tavern ---------- */
+function renderTavern() {
+  let html = `<h2>🍺 The Tavern</h2>
+  <div class="spread"><h3 style="margin:0">Adventurers for Hire <span class="sub">(roster ${livingHeroes().length}/${rosterCap()} · new faces in <span class="cd" data-cd="${state.recruitsExpire}"></span>)</span></h3>
+    <button class="ghost" ${state.gold < CFG.RECRUIT_REFRESH_COST ? 'disabled' : ''} onclick="A.payRefreshRecruits()">Buy a round — new faces (${CFG.RECRUIT_REFRESH_COST}g)</button>
+  </div><div class="grid" style="margin-top:8px">`;
+  if (!state.recruits.length) html += '<div class="empty">The tavern is empty tonight.</div>';
+  state.recruits.forEach((r, i) => {
+    const c = CLASSES[r.cls];
+    const full = livingHeroes().length >= rosterCap();
+    html += `<div class="card">
+      <div class="spread"><b>${esc(r.name)}</b> <span class="tag ${c.role}">${ROLE_ICON[c.role]} ${r.cls}</span></div>
+      <div class="sub">Level ${r.level} · Rating ${heroRating(r)} · Talent +${r.talent}</div>
+      <div class="ability"><b>${c.aName}:</b> ${c.aDesc()}</div>
+      <div class="row" style="margin-top:8px">
+        <button class="act" ${state.gold < r.cost || full ? 'disabled' : ''} onclick="A.recruitHero(${i})">Recruit — ${r.cost}g</button>
+        ${full ? '<span class="sub red">Roster full — upgrade the Keep</span>' : ''}
+      </div>
+    </div>`;
+  });
+  html += `</div><h3>📋 Job Board <span class="sub">(repeatable practice missions — postings rotate over time)</span></h3>`;
+  JOB_TIERS.forEach((tierName, tier) => {
+    if (jobTierUnlocked(tier)) {
+      const jobs = state.jobBoard.filter(j => j.tier === tier);
+      if (!jobs.length) return;
+      html += `<h3 style="color:var(--muted); letter-spacing:1px; text-transform:uppercase; font-size:13px">${tierName}</h3>`;
+      jobs.forEach(j => { html += missionRow(j, null); });
+    } else {
+      html += `<div class="card" style="opacity:.6"><div class="spread">
+        <b style="color:var(--muted); letter-spacing:1px; text-transform:uppercase; font-size:13px">🔒 ${tierName}</b>
+        <span class="sub">Unlocks when a hero reaches level ${CFG.JOB_TIER_MIN_LEVEL[tier]}</span></div></div>`;
+    }
+  });
+  return html;
+}
+
+function missionRow(def, story, statusHtml) {
+  const size = def.size || 4;
+  const sizeMult = 1 + Math.max(0, size - 4) * CFG.PARTY_SIZE_REWARD_BONUS;
+  const baseGold = Math.round(def.cr * CFG.GOLD_PER_CR * (story ? CFG.STORY_REWARD_MULT : 1) * sizeMult);
+  const baseXp = Math.round(def.cr * CFG.XP_PER_CR * (story ? CFG.STORY_REWARD_MULT : 1) * sizeMult);
+  const idle = idleHeroes();
+  const canStaff = idle.filter(h => CLASSES[h.cls].role === 'tank').length >= 1 &&
+                   idle.filter(h => CLASSES[h.cls].role === 'healer').length >= 1 &&
+                   idle.filter(h => CLASSES[h.cls].role === 'dps').length >= 2 &&
+                   idle.length >= size;
+  const sizeTxt = size > 4 ? `<b class="gold-t">${size} heroes</b>` : `${size} heroes`;
+  return `<div class="card">
+    <div class="spread">
+      <div>
+        <b>${esc(def.name)}</b>
+        <span class="sub"> · CR ${def.cr} · ${fmtHours(def.hours)} · ${sizeTxt} · ~${baseGold}g, ~${baseXp} XP each</span>
+        <div class="flavor">${esc(def.flavor)}</div>
+        ${def.expires ? `<div class="sub">Leaves the board in <span class="cd" data-cd="${def.expires}"></span></div>` : ''}
+      </div>
+      <div style="text-align:right; min-width:130px">
+        ${statusHtml !== undefined ? statusHtml :
+          `<button class="act" ${canStaff ? '' : 'disabled'} onclick='A.openPicker(${JSON.stringify(JSON.stringify({ def: { name: def.name, cr: def.cr, hours: def.hours, size, flavor: def.flavor }, story }))})'>Send party</button>
+           ${canStaff ? '' : `<div class="sub">Need ${size} ready (min 1 tank, 1 healer, 2 DPS)</div>`}`}
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ---------- Campaigns ---------- */
+function renderCampaigns() {
+  let html = '<h2>📖 Campaigns</h2>';
+  CAMPAIGNS.forEach((camp, c) => {
+    const unlocked = c === 0 || state.campaigns[c - 1] >= 5;
+    const done = state.campaigns[c];
+    html += `<div class="card" style="background:var(--panel2)">
+      <div class="spread"><b style="color:var(--gold)">${unlocked ? '' : '🔒 '}${esc(camp.name)}</b>
+      <span class="sub">${camp.levelHint} · ${done}/5 complete</span></div>
+      <div class="flavor">${esc(camp.desc)}</div></div>`;
+    if (!unlocked) {
+      html += `<div class="empty" style="margin-bottom:14px">Complete “${esc(CAMPAIGNS[c - 1].name)}” to unlock.</div>`;
+      return;
+    }
+    camp.missions.forEach((mdef, i) => {
+      let statusHtml;
+      const inProgress = state.activeMissions.some(m => m.story && m.story.c === c && m.story.i === i);
+      if (i < done) statusHtml = '<span class="green">✓ Complete</span>';
+      else if (inProgress) statusHtml = '<span class="blue">Party in the field…</span>';
+      else if (i > done) statusHtml = '<span class="sub">🔒 Locked</span>';
+      if (i === done && !inProgress) statusHtml = undefined; // renders Send party button
+      html += missionRow(mdef, { c, i }, statusHtml);
+    });
+    html += '<div style="height:14px"></div>';
+  });
+  return html;
+}
+
+/* ---------- Roster ---------- */
+function renderRoster() {
+  const living = livingHeroes();
+  const dead = state.heroes.filter(h => h.status === 'dead');
+  let html = `<h2>🗡 Roster <span class="sub">${living.length}/${rosterCap()} heroes</span></h2><div class="grid">`;
+  const order = { idle: 0, injured: 1, mission: 2, training: 3, resting: 4 };
+  living.slice().sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9) || b.level - a.level)
+    .forEach(h => { html += heroCard(h, heroActions(h)); });
+  html += '</div>';
+  if (dead.length) {
+    html += '<h3 class="red">☠ Hall of the Fallen</h3><div class="grid">';
+    dead.forEach(h => {
+      html += `<div class="card" style="opacity:.55"><div class="spread"><b>${esc(h.name)}</b>
+        <span class="tag">${h.cls}</span></div>
+        <div class="sub">Died at level ${h.level}. Remembered.</div></div>`;
+    });
+    html += '</div>';
+  }
+  return html;
+}
+
+/* ---------- Reliquary (relic shop) ---------- */
+function renderReliquary() {
+  const s = state.shop;
+  let html = `<h2>⚱ The Reliquary <span class="sub">(fresh stock in <span class="cd" data-cd="${s.expires}"></span>)</span></h2>
+  <div class="spread">
+    <div class="sub" style="max-width:70%">The keeper deals in relics pulled from tombs, battlefields, and less mentionable places. One relic per hero — choose well.</div>
+    <button class="ghost" ${state.gold < CFG.SHOP_REFRESH_COST ? 'disabled' : ''} onclick="A.refreshShopPaid()">Request new stock (${CFG.SHOP_REFRESH_COST}g)</button>
+  </div>`;
+  if (!s.relics.length) { html += '<div class="empty">The shelves are bare. Come back when the keeper restocks.</div>'; return html; }
+  html += '<div class="grid" style="margin-top:8px">';
+  s.relics.forEach((entry, i) => {
+    const t = RELICS[entry.key];
+    const glow = t.tier === 'legendary' ? ' legendary-glow' : '';
+    html += `<div class="card${glow}">
+      <div class="spread"><b class="q-${t.tier}">${t.icon} ${esc(t.name)}</b><span class="tag q-${t.tier}">${RELIC_TIERS[t.tier].name}</span></div>
+      <div class="ability">${relicEffectText(entry.key)}</div>
+      <div class="flavor">${esc(t.flavor)}</div>
+      <div class="row" style="margin-top:8px"><button class="act" ${state.gold < entry.price ? 'disabled' : ''} onclick="A.buyRelic(${i})">Buy — ${entry.price}g</button></div>
+    </div>`;
+  });
+  html += '</div>';
+  return html;
+}
+
+/* ---------- Inventory (relic management) ---------- */
+function renderInventory() {
+  const relics = state.relics;
+  let html = `<h2>🎒 Inventory <span class="sub">${relics.length} relic${relics.length !== 1 ? 's' : ''}</span></h2>
+    <div class="sub" style="margin-bottom:10px">Each hero equips one relic; its effect applies automatically on missions. Consumable relics break when their charges run out.</div>`;
+  if (!relics.length) { html += '<div class="empty">No relics yet. Earn them on missions, complete campaign chapters, or buy them at the Reliquary.</div>'; return html; }
+  const order = { legendary: 0, rare: 1, magic: 2, common: 3 };
+  const sorted = relics.slice().sort((a, b) =>
+    (a.equippedBy ? 1 : 0) - (b.equippedBy ? 1 : 0) || order[a.tier] - order[b.tier]);
+  html += '<div class="grid">';
+  sorted.forEach(r => {
+    const acts = [];
+    if (r.equippedBy) {
+      const h = heroById(r.equippedBy);
+      const locked = h && h.status === 'mission';
+      acts.push(`<button class="ghost" ${locked ? 'disabled' : ''} onclick="A.unequipRelic(${r.id})">${locked ? 'On mission' : 'Unequip'}</button>`);
+    } else {
+      acts.push(`<button class="act" onclick="A.openEquip(${r.id})">Equip</button>`);
+      acts.push(`<button class="ghost" onclick="A.sellRelic(${r.id})">Sell — ${relicSellValue(r)}g</button>`);
+    }
+    html += relicCard(r, acts.join(''));
+  });
+  html += '</div>';
+  return html;
+}
+
+/* ---------- Modals ---------- */
+function renderModal() {
+  const root = $('modal-root');
+  if (ui.naming) { root.innerHTML = guildModal(); focusGuildInput(); return; }
+  if (ui.awayMsgs) { root.innerHTML = awayModal(); return; }
+  if (ui.briefings.length) { root.innerHTML = briefingModal(); return; }
+  if (ui.dataModal) { root.innerHTML = dataModal(); return; }
+  if (ui.confirmDismiss != null) { root.innerHTML = dismissModal(); return; }
+  if (ui.equipRelic != null) { root.innerHTML = equipRelicModal(); return; }
+  if (ui.equipHero != null) { root.innerHTML = equipHeroModal(); return; }
+  if (ui.picker) { root.innerHTML = pickerModal(); return; }
+  if (ui.heroPicker) { root.innerHTML = heroPickerModal(); return; }
+  root.innerHTML = '';
+}
+
+// keep focus in the guild-name field without wiping what the user has typed
+function focusGuildInput() {
+  const el = $('guildNameInput');
+  if (el && document.activeElement !== el) { el.focus(); el.selectionStart = el.value.length; }
+}
+
+function guildModal() {
+  const rename = ui.naming === 'rename';
+  const suggestion = ui._guildSuggestion || (ui._guildSuggestion = state.guildName || genGuildName());
+  const canAfford = !rename || state.gold >= CFG.GUILD_RENAME_COST;
+  return `<div id="modal-wrap"><div class="modal">
+    <h2>${rename ? '✍ Rename your guild' : '⚜ Name your guild'}</h2>
+    <div class="sub" style="margin-bottom:10px">${rename
+      ? `A fresh name costs <b class="gold-t">${CFG.GUILD_RENAME_COST} gold</b> in new banners and seals.`
+      : 'Every great guild needs a name to strike fear (or at least mild recognition) into the realm.'}</div>
+    <div class="row" style="gap:6px">
+      <input id="guildNameInput" maxlength="40" placeholder="Type a name…" value="${esc(suggestion)}"
+        style="flex:1; background:var(--panel2); border:1px solid var(--border); color:var(--text); font-family:inherit; font-size:16px; padding:8px 10px; border-radius:6px"
+        onkeydown="if(event.key==='Enter')A.confirmGuildName()">
+      <button class="ghost" onclick="A.rollGuildName()">🎲 Random</button>
+    </div>
+    ${rename && !canAfford ? '<div class="sub red" style="margin-top:8px">Not enough gold to rename right now.</div>' : ''}
+    <div class="spread" style="margin-top:14px">
+      ${rename ? '<button class="ghost" onclick="A.closeNaming()">Cancel</button>' : '<span class="sub">You can rename later for a small fee.</span>'}
+      <button class="act" ${rename && !canAfford ? 'disabled' : ''} onclick="A.confirmGuildName()">${rename ? 'Rename' : 'Found the guild'}</button>
+    </div>
+  </div></div>`;
+}
+
+function briefingModal() {
+  const b = ui.briefings[0];
+  const more = ui.briefings.length - 1;
+  const banner = b.success
+    ? '<div style="font-size:22px" class="green">✅ Mission Successful</div>'
+    : '<div style="font-size:22px" class="red">❌ Mission Failed</div>';
+  let body = `<div class="preview">
+    <div class="row"><span>💰 Gold brought home: <b class="gold-t">${b.gold}</b></span></div>
+    <div class="row sub"><span>✨ Experience: ~${b.xpEach} XP to each of the ${b.partySize} heroes${b.success ? '' : ' (reduced — the mission failed)'}</span></div>`;
+  if (b.leveled.length) body += `<div class="row"><span class="blue">⭐ Level up: ${b.leveled.map(l => `${esc(l.name)} → Lv ${l.level}`).join(', ')}</span></div>`;
+  if (b.injured.length) body += `<div class="row"><span class="yellow">🩹 Injured (out ${b.recoveryTxt}, +1 mark): ${b.injured.map(esc).join(', ')}</span></div>`;
+  if (b.fallen.length) body += `<div class="row"><span class="red">☠ Fallen — lost forever: ${b.fallen.map(esc).join(', ')}</span></div>`;
+  if (!b.injured.length && !b.fallen.length) body += `<div class="row"><span class="green">🛡 Everyone came home unharmed.</span></div>`;
+  (b.relicEvents || []).forEach(ev => body += `<div class="row"><span class="blue">${esc(relicEventLog(ev))}</span></div>`);
+  (b.relicDrops || []).forEach(d => body += `<div class="row"><span class="q-${d.tier}">🎁 Relic acquired: ${d.icon} ${esc(d.name)} (${RELIC_TIERS[d.tier].name})</span></div>`);
+  if (b.campaignComplete) body += `<div class="row"><span class="gold-t">🏆 Campaign complete: “${esc(b.campaignComplete)}”!${b.campaignNext ? ` “${esc(b.campaignNext)}” is now open.` : ''}</span></div>`;
+  body += '</div>';
+  return `<div id="modal-wrap" onclick="if(event.target.id==='modal-wrap')A.nextBriefing()"><div class="modal">
+    <div class="sub">Mission report${b.story ? ' · story' : ''}</div>
+    <h2 style="margin-top:2px">${esc(b.name)}</h2>
+    ${banner}
+    ${body}
+    <div class="spread" style="margin-top:12px">
+      <span class="sub">${more > 0 ? `${more} more report${more > 1 ? 's' : ''} waiting` : ''}</span>
+      <button class="act" onclick="A.nextBriefing()">${more > 0 ? 'Next report' : 'Dismiss'}</button>
+    </div>
+  </div></div>`;
+}
+
+function dataModal() {
+  const data = exportSaveText();
+  const taStyle = 'width:100%; height:70px; resize:vertical; background:var(--panel2); border:1px solid var(--border); color:var(--muted); font-family:monospace; font-size:11px; padding:8px; border-radius:6px; white-space:pre-wrap; word-break:break-all; overflow-y:auto';
+  return `<div id="modal-wrap" onclick="if(event.target.id==='modal-wrap')A.closeData()"><div class="modal">
+    <h2>💾 Backup &amp; Restore</h2>
+    <div class="sub" style="margin-bottom:12px">Your game is stored only in this browser. Export a copy to keep it safe, move it to another device, or recover it if browser data is cleared.</div>
+
+    <h3 style="margin-top:0">Export</h3>
+    <textarea id="exportText" readonly onclick="this.select()" style="${taStyle}">${esc(data)}</textarea>
+    <div class="row" style="margin-top:6px">
+      <button class="act" onclick="A.exportDownload()">⬇ Download save file</button>
+      <button class="ghost" onclick="A.exportCopy()">Copy to clipboard</button>
+      <span id="exportStatus" class="sub"></span>
+    </div>
+
+    <hr class="thin">
+    <h3>Import</h3>
+    <div class="sub red" style="margin-bottom:6px">⚠ Loading a save replaces your current game. This cannot be undone — export a backup first if unsure.</div>
+    <div class="row" style="margin-bottom:6px">
+      <input type="file" accept="application/json,.json,.txt" onchange="A.importFile(event)"
+        style="color:var(--muted); font-family:inherit; font-size:12px">
+    </div>
+    <textarea id="importText" placeholder="…or paste exported save text here" style="${taStyle}; color:var(--text)"></textarea>
+    <div class="row" style="margin-top:6px">
+      <button class="act" onclick="A.importFromText()">📥 Load this save</button>
+      <span id="importStatus" class="sub"></span>
+    </div>
+
+    <div style="text-align:right; margin-top:14px"><button class="ghost" onclick="A.closeData()">Close</button></div>
+  </div></div>`;
+}
+
+// Inventory → choose which hero gets this relic
+function equipRelicModal() {
+  const r = state.relics.find(x => x.id === ui.equipRelic);
+  if (!r) return '';
+  const t = RELICS[r.key];
+  const pool = livingHeroes().filter(h => h.status !== 'mission');
+  return `<div id="modal-wrap" onclick="if(event.target.id==='modal-wrap')A.closeEquip()"><div class="modal">
+    <h2>Equip ${t.icon} ${esc(t.name)}</h2>
+    <div class="ability" style="margin-bottom:10px"><span class="q-${t.tier}">${RELIC_TIERS[t.tier].name}</span> — ${relicEffectText(r.key)}</div>
+    ${pool.map(h => { const cur = heroRelic(h);
+      return `<div class="pick-row" onclick="A.doEquipToHero(${h.id})">
+        <span class="nm"><b>${esc(h.name)}</b> <span class="sub">Lv ${h.level} ${h.cls}</span></span>
+        ${cur ? `<span class="sub">holds ${RELICS[cur.key].icon} ${esc(RELICS[cur.key].name)} — will swap</span>` : '<span class="sub green">empty slot</span>'}
+      </div>`; }).join('') || '<div class="empty">No available heroes — everyone is out on a mission.</div>'}
+    <div style="text-align:right; margin-top:10px"><button class="ghost" onclick="A.closeEquip()">Cancel</button></div>
+  </div></div>`;
+}
+
+// Roster → choose which relic a hero equips
+function equipHeroModal() {
+  const h = heroById(ui.equipHero);
+  if (!h) return '';
+  const cur = heroRelic(h);
+  const avail = state.relics.filter(r => !r.equippedBy);
+  return `<div id="modal-wrap" onclick="if(event.target.id==='modal-wrap')A.closeEquipHero()"><div class="modal">
+    <h2>Relic for ${esc(h.name)} <span class="sub">Lv ${h.level} ${h.cls}</span></h2>
+    ${cur ? `<div class="preview"><div class="spread">
+        <span class="q-${cur.tier}">${RELICS[cur.key].icon} ${esc(RELICS[cur.key].name)}</span>
+        <button class="ghost" onclick="A.unequipRelic(${cur.id})">Unequip</button></div>
+      <div class="ability">${relicEffectText(cur.key)}</div></div>` : ''}
+    <h3>Available relics</h3>
+    ${avail.map(r => `<div class="pick-row" onclick="A.doEquipRelic(${r.id})">
+      <span class="nm"><b class="q-${r.tier}">${RELICS[r.key].icon} ${esc(RELICS[r.key].name)}</b> <span class="sub">${RELIC_TIERS[r.tier].name}</span>
+      <div class="sub">${relicEffectText(r.key)}</div></span>
+    </div>`).join('') || '<div class="empty">No unequipped relics. Find or buy some first.</div>'}
+    <div style="text-align:right; margin-top:10px"><button class="ghost" onclick="A.closeEquipHero()">Close</button></div>
+  </div></div>`;
+}
+
+function dismissModal() {
+  const h = heroById(ui.confirmDismiss);
+  if (!h) return '';
+  return `<div id="modal-wrap" onclick="if(event.target.id==='modal-wrap')A.cancelDismiss()"><div class="modal">
+    <h2 class="red">👋 Dismiss ${esc(h.name)}?</h2>
+    <div class="preview">
+      <div>${esc(h.name)} — Level ${h.level} ${h.cls}, rating ${heroRating(h)}${h.marks ? `, ${h.marks} injury mark${h.marks > 1 ? 's' : ''}` : ''}.</div>
+      <div class="sub red" style="margin-top:6px">This permanently removes them from your guild. It cannot be undone, and no gold is refunded.</div>
+    </div>
+    <div class="spread" style="margin-top:12px">
+      <button class="ghost" onclick="A.cancelDismiss()">Keep them</button>
+      <button class="act" style="background:var(--red)" onclick="A.confirmDismissHero()">Dismiss for good</button>
+    </div>
+  </div></div>`;
+}
+
+function awayModal() {
+  return `<div id="modal-wrap" onclick="if(event.target.id==='modal-wrap')A.closeAway()"><div class="modal">
+    <h2>🕯 While you were away…</h2>
+    ${ui.awayMsgs.map(m => `<div class="logline">${esc(m)}</div>`).join('') || '<div class="empty">Nothing of note.</div>'}
+    <div style="margin-top:14px; text-align:right"><button class="act" onclick="A.closeAway()">To work</button></div>
+  </div></div>`;
+}
+
+function partyCompValid(picked, size) {
+  const n = r => picked.filter(h => CLASSES[h.cls].role === r).length;
+  return picked.length === size && n('tank') >= 1 && n('healer') >= 1 && n('dps') >= 2;
+}
+
+function pickerModal() {
+  const { def, story } = ui.picker;
+  const size = def.size || 4;
+  const picked = ui.picked.map(heroById);
+  const roles = { tank: [], healer: [], dps: [] };
+  idleHeroes().forEach(h => roles[CLASSES[h.cls].role].push(h));
+  Object.values(roles).forEach(a => a.sort((x, y) => heroRating(y) - heroRating(x)));
+
+  const min = { tank: 1, healer: 1, dps: 2 };
+  let rows = '';
+  ['tank', 'healer', 'dps'].forEach(role => {
+    const have = picked.filter(h => CLASSES[h.cls].role === role).length;
+    const ok = have >= min[role];
+    rows += `<h3>${ROLE_ICON[role]} ${ROLE_NAME[role]} <span class="sub ${ok ? 'green' : ''}">${have} picked (need ≥${min[role]})</span></h3>`;
+    if (!roles[role].length) rows += '<div class="empty">No one available.</div>';
+    roles[role].forEach(h => {
+      const sel = ui.picked.includes(h.id);
+      rows += `<div class="pick-row ${sel ? 'sel' : ''}" onclick="A.togglePick(${h.id})">
+        <span class="nm"><b>${esc(h.name)}</b> <span class="sub">Lv ${h.level} ${h.cls} · Rating ${heroRating(h)}</span></span>
+        ${h.marks === CFG.MAX_MARKS - 1 ? '<span class="red" title="One more injury kills this hero">⚠ 2 marks</span>' : marksHtml(h)}
+      </div>`;
+    });
+  });
+
+  let preview = '';
+  if (picked.length) {
+    const r = partyRating(picked);
+    let inner = `<div class="row"><span>Party rating: <b class="gold-t">${r}</b> vs CR <b>${def.cr}</b> · ${picked.length}/${size} picked</span></div>`;
+    if (partyCompValid(picked, size)) {
+      const sc = successChance(picked, def.cr);
+      const dur = missionDurationMs(def.hours, picked);
+      const injS = picked.map(h => injuryChance(picked, h, def.cr, false));
+      const injF = picked.map(h => injuryChance(picked, h, def.cr, true));
+      const avg = a => a.reduce((x, y) => x + y, 0) / a.length;
+      inner += `
+        <div class="row"><span>Success chance: <b class="${chanceClass(sc)}">${pct(sc)}</b></span>
+        <span>Duration: <b>${fmtDur(dur)}</b></span></div>
+        <div class="row sub"><span>Injury risk per hero: ~${pct(avg(injS))} on success, ~${pct(avg(injF))} on failure</span></div>
+        <div class="row sub"><span>Reward: ~${missionGoldReward(def.cr, !!story, picked, true)}g · ~${missionXpReward(def.cr, !!story, picked, picked.find(h => h.cls !== 'Barbarian') || picked[0], true)} XP each (partial on failure)</span></div>
+        ${(() => { const rl = picked.map(heroRelic).filter(Boolean); return rl.length ? `<div class="row sub"><span>Relics in play: ${rl.map(r => `<span class="q-${r.tier}">${RELICS[r.key].icon} ${esc(RELICS[r.key].name)}</span>`).join(', ')}</span></div>` : ''; })()}`;
+    } else if (picked.length < size) {
+      inner += `<div class="sub">Pick ${size - picked.length} more…</div>`;
+    } else {
+      inner += `<div class="sub red">Party needs at least 1 tank, 1 healer, and 2 DPS.</div>`;
+    }
+    preview = `<div class="preview">${inner}</div>`;
+  }
+
+  const ready = partyCompValid(picked, size);
+  return `<div id="modal-wrap" onclick="if(event.target.id==='modal-wrap')A.closePicker()"><div class="modal">
+    <h2>Assemble party — ${esc(def.name)}</h2>
+    <div class="sub">CR ${def.cr} · base ${fmtHours(def.hours)} · party of ${size}${size > 4 ? ` (+${Math.round((size - 4) * CFG.PARTY_SIZE_REWARD_BONUS * 100)}% rewards)` : ''}${story ? ' · story mission' : ' · repeatable'}</div>
+    <div class="flavor">${esc(def.flavor)}</div>
+    ${rows}
+    ${preview}
+    <div class="spread" style="margin-top:12px">
+      <button class="ghost" onclick="A.closePicker()">Cancel</button>
+      <button class="act" ${ready ? '' : 'disabled'} onclick="A.confirmParty()">⚔ Send them out</button>
+    </div>
+  </div></div>`;
+}
+
+function heroPickerModal() {
+  const purpose = ui.heroPicker;
+  const pool = purpose === 'train' ? idleHeroes() : idleHeroes().filter(h => h.marks > 0);
+  const title = purpose === 'train' ? '🎓 Assign to training' : '🛌 Send to rest';
+  const note = purpose === 'train'
+    ? `${CFG.TRAINING_XP_PER_HOUR} XP/hour for up to ${CFG.TRAINING_CAP_H} hours.`
+    : `${CFG.REST_DURATION_H} hours; removes one injury mark.`;
+  return `<div id="modal-wrap" onclick="if(event.target.id==='modal-wrap')A.closeHeroPicker()"><div class="modal">
+    <h2>${title}</h2><div class="sub" style="margin-bottom:10px">${note}</div>
+    ${pool.map(h => `<div class="pick-row" onclick="A.pickHeroFor(${h.id})">
+      <span class="nm"><b>${esc(h.name)}</b> <span class="sub">Lv ${h.level} ${h.cls}</span></span>
+      ${marksHtml(h)}
+    </div>`).join('') || '<div class="empty">No eligible heroes.</div>'}
+    <div style="text-align:right; margin-top:10px"><button class="ghost" onclick="A.closeHeroPicker()">Cancel</button></div>
+  </div></div>`;
+}
+
+function renderDrawer() {
+  const root = $('drawer-root');
+  if (!ui.drawer) { root.innerHTML = ''; return; }
+  root.innerHTML = `<div id="drawer">
+    <div class="spread"><h2 style="margin:0">📜 Chronicle</h2>
+    <button class="ghost" onclick="A.toggleDrawer()">Close</button></div>
+    <div style="margin-top:10px">
+    ${state.log.slice().reverse().map(l => `<div class="logline"><span class="lt">${fmtWhen(l.t)}</span>${esc(l.msg)}</div>`).join('') || '<div class="empty">Nothing yet.</div>'}
+    </div></div>`;
+}
+
+/* =====================================================================
+ *  ACTION DISPATCH (called from inline handlers)
+ * ===================================================================== */
+const A = {
+  setView,
+  toggleDrawer() { ui.drawer = !ui.drawer; renderDrawer(); },
+  closeAway() { ui.awayMsgs = null; renderModal(); },
+
+  // --- guild naming ---
+  openRename() { ui.naming = 'rename'; ui._guildSuggestion = state.guildName; renderModal(); },
+  closeNaming() { ui.naming = null; delete ui._guildSuggestion; renderModal(); },
+  rollGuildName() {
+    const name = genGuildName();
+    ui._guildSuggestion = name;
+    const el = $('guildNameInput');
+    if (el) { el.value = name; el.focus(); }
+  },
+  confirmGuildName() {
+    const el = $('guildNameInput');
+    const val = el ? el.value : (ui._guildSuggestion || '');
+    if (ui.naming === 'rename') { if (!renameGuild(val)) return; }
+    else foundGuild(val);
+    ui.naming = null; delete ui._guildSuggestion;
+    render();
+  },
+
+  // --- mission briefings ---
+  nextBriefing() { ui.briefings.shift(); render(); },
+
+  // --- dismiss a hero ---
+  askDismiss(id) { ui.confirmDismiss = id; renderModal(); },
+  cancelDismiss() { ui.confirmDismiss = null; renderModal(); },
+  confirmDismissHero() { const id = ui.confirmDismiss; ui.confirmDismiss = null; dismissHero(id); render(); },
+
+  // --- backup & restore ---
+  openData() { ui.dataModal = true; renderModal(); },
+  closeData() { ui.dataModal = false; renderModal(); },
+  exportDownload() {
+    const data = exportSaveText();
+    try {
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `lfg-save-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setStatus('exportStatus', 'Saved to your downloads.');
+    } catch (e) { setStatus('exportStatus', 'Download blocked — copy the text instead.', true); }
+  },
+  async exportCopy() {
+    const data = exportSaveText();
+    try {
+      await navigator.clipboard.writeText(data);
+      setStatus('exportStatus', 'Copied to clipboard.');
+    } catch (e) {
+      const el = $('exportText'); if (el) { el.focus(); el.select(); }
+      setStatus('exportStatus', 'Press Ctrl/Cmd+C to copy the selected text.', true);
+    }
+  },
+  importFile(ev) {
+    const file = ev.target.files && ev.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => { const el = $('importText'); if (el) el.value = reader.result; setStatus('importStatus', 'File loaded — press “Load this save”.'); };
+    reader.onerror = () => setStatus('importStatus', 'Could not read that file.', true);
+    reader.readAsText(file);
+  },
+  importFromText() {
+    const el = $('importText');
+    const text = el ? el.value.trim() : '';
+    if (!text) { setStatus('importStatus', 'Paste your save text or choose a file first.', true); return; }
+    const res = applyImport(text);
+    if (res.ok) { ui.dataModal = false; render(); }
+    else setStatus('importStatus', res.msg, true);
+  },
+
+  // --- relics: shop, equip, inventory ---
+  buyRelic(i) {
+    const entry = state.shop.relics[i];
+    if (!entry || state.gold < entry.price) return;
+    state.gold -= entry.price;
+    state.relics.push(makeRelic(entry.key));
+    state.shop.relics.splice(i, 1);
+    log(`⚱ Bought ${RELICS[entry.key].icon} ${RELICS[entry.key].name} for ${entry.price} gold.`);
+    save(); render();
+  },
+  refreshShopPaid() {
+    if (state.gold < CFG.SHOP_REFRESH_COST) return;
+    state.gold -= CFG.SHOP_REFRESH_COST;
+    refreshShop(Date.now());
+    log('⚱ You pay the keeper to haul out new stock.');
+    save(); render();
+  },
+  unequipRelic, sellRelic,
+  openEquip(id) { ui.equipRelic = id; renderModal(); },
+  closeEquip() { ui.equipRelic = null; renderModal(); },
+  doEquipToHero(heroId) { equipRelic(ui.equipRelic, heroId); ui.equipRelic = null; render(); },
+  openEquipHero(id) { ui.equipHero = id; renderModal(); },
+  closeEquipHero() { ui.equipHero = null; renderModal(); },
+  doEquipRelic(relicId) { equipRelic(relicId, ui.equipHero); render(); }, // keep modal open to show the swap
+
+  openPicker(json) {
+    ui.picker = JSON.parse(json);
+    ui.picked = [];
+    renderModal();
+  },
+  closePicker() { ui.picker = null; ui.picked = []; renderModal(); },
+  togglePick(id) {
+    const h = heroById(id);
+    if (!h || !ui.picker) return;
+    const size = ui.picker.def.size || 4;
+    if (ui.picked.includes(id)) {
+      ui.picked = ui.picked.filter(x => x !== id);
+    } else if (ui.picked.length < size) {
+      ui.picked.push(id);
+    }
+    renderModal();
+  },
+  confirmParty() {
+    if (!ui.picker) return;
+    const size = ui.picker.def.size || 4;
+    if (!partyCompValid(ui.picked.map(heroById), size)) return;
+    startMission(ui.picker.def, ui.picked, ui.picker.story);
+    ui.picker = null; ui.picked = [];
+    render();
+  },
+
+  openHeroPicker(purpose) { ui.heroPicker = purpose; renderModal(); },
+  closeHeroPicker() { ui.heroPicker = null; renderModal(); },
+  pickHeroFor(id) {
+    const purpose = ui.heroPicker;
+    ui.heroPicker = null;
+    if (purpose === 'train') assignTraining(id);
+    else assignRest(id);
+    render();
+  },
+
+  assignTraining(id) { assignTraining(id); render(); },
+  assignRest(id) { assignRest(id); render(); },
+  recallTraining, cancelRest, healMark, recruitHero, payRefreshRecruits, upgradeKeep,
+};
+window.A = A;
+
+/* =====================================================================
+ *  TICK LOOP
+ * ===================================================================== */
+let tickCount = 0;
+function tick() {
+  const now = Date.now();
+  // fast countdown updates without a full re-render
+  document.querySelectorAll('[data-cd]').forEach(el => {
+    el.textContent = fmtDur(Number(el.dataset.cd) - now);
+  });
+  // don't re-render (and wipe an open text field) while a modal with inputs is up
+  const blockRender = !!ui.naming || ui.dataModal;
+  let dirty = false;
+  if (pendingEvents(now).length) { processEvents(now); dirty = true; }   // resolve missions/training/rest; queues briefings
+  if (autoRefreshRecruits(now)) { save(); dirty = true; }                 // 12–18h hire board reshuffle
+  if (autoRefreshShop(now)) { save(); dirty = true; }                     // 12–24h Reliquary restock
+  if (state.jobBoard.some(j => j.expires <= now)) { refreshJobBoard(now); save(); dirty = true; }
+  if (dirty && !blockRender) render();
+  if (++tickCount % 20 === 0) save();
+}
+
+/* =====================================================================
+ *  BOOT
+ * ===================================================================== */
+(function boot() {
+  const now = Date.now();
+  if (load()) {
+    // migrate saves from before these features existed
+    if (!Array.isArray(state.jobBoard)) state.jobBoard = [];
+    if (typeof state.guildName !== 'string') state.guildName = '';
+    if (!Array.isArray(state.relics)) state.relics = [];
+    if (!state.shop || !Array.isArray(state.shop.relics)) state.shop = { relics: [], expires: 0 };
+    if (!Array.isArray(ui.briefings)) ui.briefings = [];
+    const away = now - (state.lastSeen || now);
+    const logBefore = state.log.length;
+    const processed = processEvents(now);
+    if (processed > 0 && away > CFG.AWAY_MODAL_MIN_S * 1000) {
+      ui.awayMsgs = state.log.slice(logBefore).map(l => l.msg);
+    }
+    ui.briefings = []; // offline mission results are summarized in the away recap
+    if (!state.recruits.length) refreshRecruitPool();
+    autoRefreshRecruits(now);   // reshuffle the hire board if its timer lapsed while away
+    autoRefreshShop(now);       // restock the Reliquary if its timer lapsed while away
+    if (!state.shop.relics.length) refreshShop(now);
+    refreshJobBoard(now);
+    if (!state.guildName) ui.naming = 'found'; // migrated player still needs to name the guild
+    save();
+  } else {
+    initNewGame(now);
+    ui.naming = 'found';        // brand-new guild: prompt for a name first
+  }
+  render();
+  setInterval(tick, 1000);
+  window.addEventListener('beforeunload', save);
+  // debug handle (harmless in normal play)
+  window.LFG = { get state() { return state; }, get ui() { return ui; }, save, processEvents, render, refreshJobBoard, autoRefreshRecruits, refreshShop, makeRelic, startMission, RELICS, CFG };
+})();
+</script>
+</body>
+</html>
