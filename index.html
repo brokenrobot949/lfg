@@ -59,6 +59,12 @@
   }
   nav button:hover { color: var(--text); }
   nav button.active { color: var(--gold); border-color: var(--border); background: var(--panel); }
+  .subtab {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    font-family: inherit; font-size: 13px; padding: 5px 14px; cursor: pointer; border-radius: 6px;
+  }
+  .subtab:hover { color: var(--text); }
+  .subtab.active { color: var(--gold); border-color: var(--gold-dim); background: var(--panel2); }
 
   /* ---------- general ---------- */
   h2 { color: var(--gold); font-size: 20px; margin: 20px 0 10px; letter-spacing: 1px; }
@@ -140,6 +146,20 @@
   .logline { font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--border); }
   .logline .lt { color: var(--muted); font-size: 11px; display: block; }
   footer.note { color: var(--muted); font-size: 11px; text-align: center; margin-top: 40px; }
+
+  /* ---------- mobile ---------- */
+  @media (max-width: 640px) {
+    #app { padding: 0 10px 60px; }
+    header { position: static; }
+    nav { top: 0; }
+    nav button { flex: 1 1 auto; text-align: center; padding: 10px 6px; font-size: 14px; }
+    button.act, button.ghost { padding: 10px 14px; font-size: 14px; }
+    .pick-row { padding: 12px 10px; }
+    .grid { grid-template-columns: 1fr; }
+    #modal-wrap { padding: 12px 8px; }
+    .modal { padding: 14px; }
+    .m-side { width: 100%; min-width: 0 !important; text-align: left !important; margin-top: 8px; }
+  }
 </style>
 </head>
 <body>
@@ -147,7 +167,10 @@
   <header id="header"></header>
   <nav id="nav"></nav>
   <main id="view"></main>
-  <footer class="note">LFG — your guild endures while you're away. Progress is saved automatically in this browser.</footer>
+  <footer class="note">
+    LFG — your guild endures while you're away. Progress is saved automatically in this browser.
+    <div style="margin-top:14px"><button class="ghost" onclick="A.askReset()" style="border-color:var(--red); color:var(--red)">⟲ Reset all data</button></div>
+  </footer>
 </div>
 <div id="modal-root"></div>
 <div id="drawer-root"></div>
@@ -182,7 +205,7 @@ const CFG = {
   INJURY_MIN: 0.01,
   INJURY_MAX: 0.65,
   FAIL_INJURY_MULT: 1.75,       // injuries are likelier on failed missions
-  INJURY_DURATION_H: 12,        // hours a hero is unavailable after an injury
+  INJURY_DURATION_H: 8,         // hours a hero is unavailable after an injury
   MAX_MARKS: 3,                 // marks at which a hero dies forever
 
   // --- mission rewards ---
@@ -198,7 +221,7 @@ const CFG = {
   TRAINING_CAP_H: 8,            // a training session ends after this many hours
 
   // --- rest ---
-  REST_DURATION_H: 24,          // removes one injury mark on completion
+  REST_DURATION_H: 16,          // removes one injury mark on completion
 
   // --- infirmary ---
   INFIRMARY_BASE_COST: 150,     // gold to remove one mark instantly...
@@ -234,20 +257,10 @@ const CFG = {
   RECRUIT_COST_PER_TALENT: 12,
   RECRUIT_LEVELS_PER_CAMPAIGN: 3, // recruit max level = 1 + this * campaigns completed
 
-  // --- class passives ---
-  FIGHTER_SUCCESS_BONUS: 0.05,  // flat success chance
-  PALADIN_INJURY_MULT: 0.6,     // party injury chance multiplier
-  BARBARIAN_XP_MULT: 1.25,      // personal XP
-  BARBARIAN_INJURY_MULT: 1.6,   // personal injury chance
-  CLERIC_RECOVERY_MULT: 0.75,   // injury recovery time multiplier (persists)
-  DRUID_SALVAGE_MULT: 1.75,     // failed-mission gold/XP fraction multiplier per Druid
-  DRUID_SALVAGE_CAP: 0.75,      // failed missions never pay more than this fraction
-  BARD_GOLD_BONUS: 0.15,
-  ROGUE_GOLD_BONUS: 0.15,
-  WIZARD_UNDERDOG_BONUS: 0.10,  // success chance when CR > party rating
-  RANGER_DURATION_MULT: 0.85,
-  WARLOCK_XP_BONUS: 0.10,       // whole-party XP
-  SORCERER_RATING_BONUS: 8,     // flat party rating
+  // --- powers ---
+  // Each class has 3 thematic powers; a hero rolls one at creation. Their
+  // individual magnitudes live in the POWERS table below. This cap is shared:
+  SALVAGE_CAP: 0.75,            // failed missions never pay more than this fraction of full
 
   // --- relics ---
   RELIC_DROP_CHANCE: 0.22,       // base chance a mission drops a relic
@@ -266,6 +279,13 @@ const CFG = {
     { common: 0,  magic: 5,  rare: 55, legendary: 40 },
   ],
 
+  // --- renown & guild rank (cosmetic — never spent, never lost) ---
+  RENOWN_PER_CR: 0.1,            // renown per point of CR on a successful mission
+  RENOWN_STORY_MULT: 2,          // story missions build fame twice as fast
+  RENOWN_FAIL_FRAC: 0.25,        // failures still spread your name a little
+  RENOWN_FIRST_CLEAR: 25,        // bonus per campaign chapter first-clear
+  RENOWN_CAMPAIGN_COMPLETE: 100, // bonus for finishing a campaign
+
   LOG_LIMIT: 80,
   AWAY_MODAL_MIN_S: 60,         // show "while you were away" if gone longer than this
 };
@@ -277,23 +297,109 @@ const pct = x => Math.round(x * 100) + '%';
  *  CLASSES
  * ===================================================================== */
 const CLASSES = {
-  Fighter:   { role: 'tank',   aName: 'Shield Wall',        aDesc: () => `+${pct(CFG.FIGHTER_SUCCESS_BONUS)} success chance on any mission.` },
-  Paladin:   { role: 'tank',   aName: 'Aura of Protection', aDesc: () => `Party injury chance reduced ${pct(1 - CFG.PALADIN_INJURY_MULT)}.` },
-  Barbarian: { role: 'tank',   aName: 'Reckless Fury',      aDesc: () => `Earns +${pct(CFG.BARBARIAN_XP_MULT - 1)} XP, but personal injury chance +${pct(CFG.BARBARIAN_INJURY_MULT - 1)}.` },
-  Cleric:    { role: 'healer', aName: 'Mending Prayer',     aDesc: () => `Party members' injuries heal ${pct(1 - CFG.CLERIC_RECOVERY_MULT)} faster (persists after the mission).` },
-  Druid:     { role: 'healer', aName: "Nature's Bounty",    aDesc: () => `Failed missions return +${pct(CFG.DRUID_SALVAGE_MULT - 1)} more of their gold and XP.` },
-  Bard:      { role: 'healer', aName: 'Silver Tongue',      aDesc: () => `+${pct(CFG.BARD_GOLD_BONUS)} mission gold.` },
-  Rogue:     { role: 'dps',    aName: 'Sticky Fingers',     aDesc: () => `+${pct(CFG.ROGUE_GOLD_BONUS)} mission gold.` },
-  Wizard:    { role: 'dps',    aName: 'Arcane Insight',     aDesc: () => `+${pct(CFG.WIZARD_UNDERDOG_BONUS)} success chance when the challenge exceeds party rating.` },
-  Ranger:    { role: 'dps',    aName: 'Pathfinder',         aDesc: () => `Mission duration reduced ${pct(1 - CFG.RANGER_DURATION_MULT)}.` },
-  Warlock:   { role: 'dps',    aName: 'Dark Bargain',       aDesc: () => `Whole party earns +${pct(CFG.WARLOCK_XP_BONUS)} XP.` },
-  Monk:      { role: 'dps',    aName: 'Iron Body',          aDesc: () => `Never injured on successful missions.` },
-  Sorcerer:  { role: 'dps',    aName: 'Wild Blood',         aDesc: () => `+${CFG.SORCERER_RATING_BONUS} to party rating.` },
+  Fighter:   { role: 'tank' },
+  Paladin:   { role: 'tank' },
+  Barbarian: { role: 'tank' },
+  Cleric:    { role: 'healer' },
+  Druid:     { role: 'healer' },
+  Bard:      { role: 'healer' },
+  Rogue:     { role: 'dps' },
+  Wizard:    { role: 'dps' },
+  Ranger:    { role: 'dps' },
+  Warlock:   { role: 'dps' },
+  Monk:      { role: 'dps' },
+  Sorcerer:  { role: 'dps' },
 };
 const ROLE_ICON = { tank: '🛡', healer: '✚', dps: '⚔' };
 const ROLE_NAME = { tank: 'Tank', healer: 'Healer', dps: 'DPS' };
 const CLASS_NAMES = Object.keys(CLASSES);
 const classesOfRole = r => CLASS_NAMES.filter(c => CLASSES[c].role === r);
+
+/* =====================================================================
+ *  POWERS — three per class, thematic; a hero rolls one at creation.
+ *  Effect fields (all optional) are aggregated by the mission math via
+ *  powerAgg()/heroPower(). The first power listed for each class is the
+ *  "signature" one, used as the default when migrating older saves.
+ *  Fields: successFlat, successUnderdog, partyInjuryMult, selfInjuryMult,
+ *  selfImmuneOnSuccess, recoveryMult, salvageMult, goldPct, selfXpMult,
+ *  partyXpPct, durationMult, ratingFlat.
+ * ===================================================================== */
+const POWERS = {
+  // Fighter (tank) — disciplined martial prowess
+  fighter_shieldwall: { cls: 'Fighter', name: 'Shield Wall',   desc: '+5% party success chance on any mission.',                  successFlat: 0.05 },
+  fighter_rally:      { cls: 'Fighter', name: 'Rally',          desc: '+6 party rating from disciplined formation.',               ratingFlat: 6 },
+  fighter_bulwark:    { cls: 'Fighter', name: 'Bulwark',        desc: 'Party injury chance reduced 15%.',                          partyInjuryMult: 0.85 },
+  // Paladin (tank) — holy protection
+  paladin_aura:       { cls: 'Paladin', name: 'Aura of Protection', desc: 'Party injury chance reduced 40%.',                      partyInjuryMult: 0.60 },
+  paladin_layhands:   { cls: 'Paladin', name: 'Lay on Hands',   desc: "Party's injuries heal 20% faster (persists after missions).", recoveryMult: 0.80 },
+  paladin_favor:      { cls: 'Paladin', name: 'Divine Favor',   desc: '+4% party success chance.',                                 successFlat: 0.04 },
+  // Barbarian (tank) — raw savagery
+  barbarian_fury:     { cls: 'Barbarian', name: 'Reckless Fury', desc: 'Earns +25% XP, but personal injury chance +60%.',          selfXpMult: 1.25, selfInjuryMult: 1.60 },
+  barbarian_rage:     { cls: 'Barbarian', name: 'Blood Rage',    desc: '+12 party rating, but personal injury chance +40%.',        ratingFlat: 12, selfInjuryMult: 1.40 },
+  barbarian_hide:     { cls: 'Barbarian', name: 'Thick Hide',    desc: 'Personal injury chance reduced 40%.',                       selfInjuryMult: 0.60 },
+  // Cleric (healer) — divine care
+  cleric_mending:     { cls: 'Cleric', name: 'Mending Prayer',   desc: "Party's injuries heal 25% faster (persists after missions).", recoveryMult: 0.75 },
+  cleric_sanctuary:   { cls: 'Cleric', name: 'Sanctuary',        desc: 'Party injury chance reduced 22%.',                          partyInjuryMult: 0.78 },
+  cleric_warding:     { cls: 'Cleric', name: 'Warding Light',    desc: '+4% party success chance.',                                 successFlat: 0.04 },
+  // Druid (healer) — nature's gifts
+  druid_bounty:       { cls: 'Druid', name: "Nature's Bounty",   desc: 'Failed missions return +75% more of their gold and XP.',    salvageMult: 1.75 },
+  druid_regrowth:     { cls: 'Druid', name: 'Regrowth',          desc: "Party's injuries heal 30% faster (persists after missions).", recoveryMult: 0.70 },
+  druid_wildshape:    { cls: 'Druid', name: 'Wild Shape',        desc: '+8 party rating.',                                          ratingFlat: 8 },
+  // Bard (healer) — inspiring performance
+  bard_silvertongue:  { cls: 'Bard', name: 'Silver Tongue',      desc: '+15% mission gold.',                                        goldPct: 0.15 },
+  bard_ballad:        { cls: 'Bard', name: 'Inspiring Ballad',   desc: 'Whole party earns +12% XP.',                                partyXpPct: 0.12 },
+  bard_songofrest:    { cls: 'Bard', name: 'Song of Rest',       desc: "Party's injuries heal 20% faster (persists after missions).", recoveryMult: 0.80 },
+  // Rogue (dps) — cunning and larceny
+  rogue_stickyfingers:{ cls: 'Rogue', name: 'Sticky Fingers',    desc: '+15% mission gold.',                                        goldPct: 0.15 },
+  rogue_ambush:       { cls: 'Rogue', name: 'Ambush',            desc: '+5% party success chance.',                                 successFlat: 0.05 },
+  rogue_evasion:      { cls: 'Rogue', name: 'Evasion',           desc: 'Personal injury chance reduced 50%.',                       selfInjuryMult: 0.50 },
+  // Wizard (dps) — arcane mastery
+  wizard_insight:     { cls: 'Wizard', name: 'Arcane Insight',   desc: '+10% success chance when the challenge exceeds party rating.', successUnderdog: 0.10 },
+  wizard_fireball:    { cls: 'Wizard', name: 'Fireball',         desc: '+10 party rating.',                                         ratingFlat: 10 },
+  wizard_haste:       { cls: 'Wizard', name: 'Haste',            desc: 'Mission duration reduced 10%.',                             durationMult: 0.90 },
+  // Ranger (dps) — wilderness craft
+  ranger_pathfinder:  { cls: 'Ranger', name: 'Pathfinder',       desc: 'Mission duration reduced 15%.',                             durationMult: 0.85 },
+  ranger_mark:        { cls: 'Ranger', name: "Hunter's Mark",    desc: '+8 party rating.',                                          ratingFlat: 8 },
+  ranger_camouflage:  { cls: 'Ranger', name: 'Camouflage',       desc: 'Party injury chance reduced 15%.',                          partyInjuryMult: 0.85 },
+  // Warlock (dps) — eldritch pacts
+  warlock_bargain:    { cls: 'Warlock', name: 'Dark Bargain',    desc: 'Whole party earns +10% XP.',                                partyXpPct: 0.10 },
+  warlock_hex:        { cls: 'Warlock', name: 'Hex',             desc: '+5% party success chance.',                                 successFlat: 0.05 },
+  warlock_siphon:     { cls: 'Warlock', name: 'Soul Siphon',     desc: '+12% mission gold.',                                        goldPct: 0.12 },
+  // Monk (dps) — bodily discipline
+  monk_ironbody:      { cls: 'Monk', name: 'Iron Body',          desc: 'Never injured on successful missions.',                     selfImmuneOnSuccess: true },
+  monk_flow:          { cls: 'Monk', name: 'Flowing Form',       desc: 'Personal injury chance reduced 50%.',                       selfInjuryMult: 0.50 },
+  monk_ki:            { cls: 'Monk', name: 'Focused Ki',         desc: '+8 party rating.',                                          ratingFlat: 8 },
+  // Sorcerer (dps) — innate wild magic
+  sorcerer_wildblood: { cls: 'Sorcerer', name: 'Wild Blood',     desc: '+8 party rating.',                                          ratingFlat: 8 },
+  sorcerer_chaos:     { cls: 'Sorcerer', name: 'Chaos Surge',    desc: '+5% party success chance.',                                 successFlat: 0.05 },
+  sorcerer_font:      { cls: 'Sorcerer', name: 'Font of Magic',  desc: 'Whole party earns +10% XP.',                                partyXpPct: 0.10 },
+};
+const POWER_KEYS = Object.keys(POWERS);
+const powersOfClass = cls => POWER_KEYS.filter(k => POWERS[k].cls === cls);
+const heroPower = h => POWERS[h && h.power] || null;
+
+// Aggregate the party's power effects into a single bundle for the mission math.
+function powerAgg(heroes) {
+  let successFlat = 0, underdog = 0, partyInjuryMult = 1, recoveryMult = 1, salvageMult = 1,
+      goldPct = 0, partyXpPct = 0, durationMult = 1, ratingFlat = 0;
+  heroes.forEach(h => {
+    const p = heroPower(h); if (!p) return;
+    successFlat += p.successFlat || 0;
+    underdog += p.successUnderdog || 0;
+    goldPct += p.goldPct || 0;
+    partyXpPct += p.partyXpPct || 0;
+    ratingFlat += p.ratingFlat || 0;
+    if (p.partyInjuryMult != null) partyInjuryMult *= p.partyInjuryMult;
+    if (p.recoveryMult != null) recoveryMult *= p.recoveryMult;
+    if (p.salvageMult != null) salvageMult *= p.salvageMult;
+    if (p.durationMult != null) durationMult *= p.durationMult;
+  });
+  return { successFlat, underdog, partyInjuryMult, recoveryMult, salvageMult, goldPct, partyXpPct, durationMult, ratingFlat };
+}
+// a hero whose power doesn't personally inflate XP — for the "~X XP each" estimate
+function representativeHero(heroes) {
+  return heroes.find(h => { const p = heroPower(h); return !(p && p.selfXpMult); }) || heroes[0];
+}
 
 /* =====================================================================
  *  MISSION CONTENT
@@ -435,8 +541,57 @@ const relicsByTier = tier => Object.keys(RELICS).filter(k => RELICS[k].tier === 
 /* =====================================================================
  *  NAME GENERATION
  * ===================================================================== */
-const NAME_FIRST = ['Thora','Brann','Isolde','Kael','Mira','Dorn','Elara','Garrick','Nyx','Osric','Petra','Quinn','Rosalind','Sten','Talia','Ulric','Vessa','Wren','Ysolt','Zed','Astrid','Balin','Cassia','Darian','Edda','Fenwick','Gilda','Hadrian','Imogen','Jorah','Katla','Lucan','Maeve','Nils','Ophira','Percival','Runa','Sable','Tovin','Una'];
-const NAME_LAST = ['Ashveil','Blackbriar','Coppervein','Duskwalker','Emberfall','Frostmane','Grimtide','Hollowbrook','Ironquill','Kettleburn','Longshadow','Mossbane','Nightriver','Oakenshield','Palefire','Quickwater','Ravenhall','Stormcaller','Thornfield','Underbough','Veilwarden','Wolfsbane','Wyrmsong','Silvergrasp','Halloway','Marrowgate','Pyrewood','Saltmarsh'];
+// Each class draws names from a thematic pool (first names + surnames/epithets).
+const CLASS_NAME_POOL = {
+  Fighter: {
+    first: ['Aldric','Bran','Cedric','Dagmar','Gareth','Halvard','Roderic','Sigurd','Wulfric','Brienne','Mathild','Odval','Renric','Tormund'],
+    last: ['Ironside','Steelheart','Shieldborn','Oathkeeper','Strongarm','Battleborn','Ironhelm','Vanguard','Hardwall','Grimblade'],
+  },
+  Paladin: {
+    first: ['Auberon','Seraphina','Lucan','Gideon','Percival','Alaric','Celestine','Damaris','Evangeline','Uriel','Mikael','Rosalind','Tancred','Isolde'],
+    last: ['Lightbringer','Dawnward','Truehart','Faithborn','Sunblessed','Highmore','Radiant','Holloway','Vowsteel','Palewarden'],
+  },
+  Barbarian: {
+    first: ['Grukk','Hilda','Ragnar','Bjorn','Ulfgar','Krug','Torvald','Skarn','Freydis','Gorm','Hakon','Thyra','Vargr','Astrid'],
+    last: ['Skullcrusher','Bloodmane','Ironjaw','Stormborn','Bearclaw','Ragefist','Frosthowl','Wildblood','Bonesplitter','Redmaw'],
+  },
+  Cleric: {
+    first: ['Benedict','Mirabel','Thaddeus','Constance','Ansel','Prudence','Ignatius','Verity','Ephraim','Lumen','Cassia','Obadiah','Serenity','Matthias'],
+    last: ['Dawnkeeper','Vowsworn','Templeton','Graceborn','Hallowell','Meekbrook','Prayerwood','Lighthand','Psalmwright','Wellspring'],
+  },
+  Druid: {
+    first: ['Alder','Fern','Rowan','Willow','Hazel','Bramble','Oakley','Ivy','Cedar','Thistle','Linden','Mossbeard','Elm','Briar'],
+    last: ['Greenwald','Wildroot','Thornwood','Barkskin','Mistwalker','Elmshade','Riverborn','Fenwild','Leafsong','Hollowoak'],
+  },
+  Bard: {
+    first: ['Fiora','Lyle','Cadence','Percy','Melody','Django','Sonnet','Rosalind','Quill','Viola','Cosmo','Allegra','Rennick','Lark'],
+    last: ['Silvertongue','Gladhand','Merriweather','Tunesmith','Brightsong','Larkspur','Goldenlute','Fairwind','Quickwit','Mirthful'],
+  },
+  Rogue: {
+    first: ['Vex','Sly','Nyx','Corvin','Rell','Sable','Jinx','Kite','Mireille','Ash','Pike','Dodge','Wren','Sparrow'],
+    last: ['Nightshade','Quickfinger','Shadowstep','Blackthorn','Silentfoot','Cutpurse','Duskcloak','Lightfoot','Coinbite','Greypocket'],
+  },
+  Wizard: {
+    first: ['Alorin','Merle','Elias','Thessaly','Orin','Ptolemy','Ysolde','Balthazar','Cornelius','Wynn','Isadora','Fizwick','Marlowe','Sabra'],
+    last: ['Spellweaver','Hightower','Runewright','Farsight','Emberquill','Starcaster','Inkwell','Grimoire','Mistveil','Cinderpage'],
+  },
+  Ranger: {
+    first: ['Kael','Ravenna','Thane','Fletcher','Wrenna','Roan','Sylas','Aria','Hawke','Bryn','Talon','Elowen','Corin','Faelan'],
+    last: ['Swiftarrow','Longstride','Trueshot','Greenbow','Wolfsbane','Farrunner','Thornhollow','Windrider','Pineshadow','Keeneye'],
+  },
+  Warlock: {
+    first: ['Malachar','Lilith','Dorian','Morgause','Cassius','Nyssa','Abaddon','Seraphine','Vane','Draven','Hecate','Grimm','Ysold','Corvus'],
+    last: ['Ashborn','Nightbargain','Voidcaller','Blackmoor','Hollowsoul','Duskbane','Grimpact','Shadowpact','Emberbrand','Direwhisper'],
+  },
+  Monk: {
+    first: ['Shen','Kaito','Anaya','Rohan','Mei','Tenzin','Kira','Bodhi','Sora','Jin','Nadia','Hoshi','Ravi','Suki'],
+    last: ['Stillwater','Ironpalm','Windstep','Clearmind','Riverstone','Lightfoot','Cloudhand','Farrise','Emptypath','Silentbell'],
+  },
+  Sorcerer: {
+    first: ['Zephyr','Ignis','Seraphel','Kyra','Ember','Astra','Cyrus','Lumina','Vesper','Sable','Nova','Elara','Blaze','Orion'],
+    last: ['Stormblood','Wildspark','Emberkin','Starborn','Chaosheart','Flamesoul','Tempestborn','Brightflame','Voltaic','Suncrest'],
+  },
+};
 
 // --- guild name generator ---
 const GUILD_ADJ = ['Iron','Silver','Golden','Crimson','Emerald','Obsidian','Ashen','Storm','Gilded','Grim','Wandering','Fabled','Ember','Frost','Shadowed','Bright','Radiant','Weary','Restless','Undaunted'];
@@ -451,6 +606,39 @@ function genGuildName() {
   }
 }
 
+// --- guild tabard: a simple heraldic design the player composes ---
+// Values carry a minRank (index into GUILD_RANKS) — 0 means available from the start.
+// The original 5 patterns / 8 colors / 12 emblems are all minRank 0 so no existing
+// saved tabard can ever become invalid; everything added later is renown-gated.
+const TABARD_PATTERNS = {
+  solid:   { name: 'Solid',     minRank: 0 },
+  pale:    { name: 'Halved',    minRank: 0 },
+  fess:    { name: 'Banded',    minRank: 0 },
+  bend:    { name: 'Slashed',   minRank: 0 },
+  chevron: { name: 'Chevron',   minRank: 0 },
+  quarter: { name: 'Quartered', minRank: 1 },
+  paly:    { name: 'Striped',   minRank: 2 },
+  cross:   { name: 'Cross',     minRank: 3 },
+  bordure: { name: 'Bordered',  minRank: 4 },
+  saltire: { name: 'Saltire',   minRank: 5 },
+};
+const TABARD_COLORS = ['#b02e2e','#2e5fb0','#2e8b57','#d4a72c','#6a3fa0','#22201c','#e8e4d8','#c96a1f','#2fa3a3','#c96a8f','#9aa3ad','#141a2e'];
+const TABARD_COLOR_MIN_RANK = [0,0,0,0,0,0,0,0,1,2,4,6]; // parallel to TABARD_COLORS
+const TABARD_EMBLEMS = ['⚔️','🛡️','🦁','🐺','🐉','🦅','🌟','🌙','🔥','🌿','👑','💀','⚜️','🦄','🐍','☀️','⚡','🌊','🗿','🕷️','🔱','💎','🎭','🌹'];
+const TABARD_EMBLEM_MIN_RANK = [0,0,0,0,0,0,0,0,0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6]; // parallel to TABARD_EMBLEMS
+
+// --- guild rank ladder, gated by state.renown (permanent, cosmetic-only fame) ---
+const GUILD_RANKS = [
+  { name: 'Unproven', at: 0 },
+  { name: 'Local Heroes', at: 50 },
+  { name: 'Known in the Province', at: 150 },
+  { name: 'Provincial Champions', at: 400 },
+  { name: 'Renowned', at: 900 },
+  { name: 'Famed Across the Realm', at: 2000 },
+  { name: 'Legendary', at: 4500 },
+  { name: 'Mythic', at: 9000 },
+];
+
 /* =====================================================================
  *  STATE
  * ===================================================================== */
@@ -460,6 +648,8 @@ function defaultState(now) {
   return {
     v: 1,
     guildName: '',        // set during the founding modal
+    tabard: null,          // {pattern,c1,c2,emblem} — set via the Keep's tabard editor
+    renown: 0,             // permanent guild fame — never decreases, never spent; gates rank/cosmetics
     gold: CFG.STARTING_GOLD,
     heroes: [],
     activeMissions: [],   // {id,name,cr,start,end,heroIds,story:{c,i}|null}
@@ -484,19 +674,26 @@ const choice = arr => arr[Math.floor(Math.random() * arr.length)];
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const uid = () => state.nextId++;
 
-function genName() {
-  return choice(NAME_FIRST) + ' ' + choice(NAME_LAST);
+function genName(cls) {
+  const pool = CLASS_NAME_POOL[cls];
+  return choice(pool.first) + ' ' + choice(pool.last);
 }
 
 function newHero(cls, level, talent) {
   return {
-    id: uid(), name: genName(), cls,
+    id: uid(), name: genName(cls), cls,
+    power: choice(powersOfClass(cls)), // roll one of the class's three powers
     level, xp: 0,
     talent: talent != null ? talent : rndInt(0, CFG.TALENT_MAX),
     marks: 0,
     status: 'idle',        // idle | mission | training | resting | injured | dead
     injuredUntil: 0,
   };
+}
+
+// give any hero missing a power its class's signature (first) power — for migration
+function ensureHeroPower(h) {
+  if (!h.power || !POWERS[h.power] || POWERS[h.power].cls !== h.cls) h.power = powersOfClass(h.cls)[0];
 }
 
 function completedCampaignCount() {
@@ -709,22 +906,48 @@ const highestHeroLevel = () => livingHeroes().reduce((m, h) => Math.max(m, h.lev
 // a job tier is visible once the guild's best hero clears its minimum level
 const jobTierUnlocked = tier => highestHeroLevel() >= (CFG.JOB_TIER_MIN_LEVEL[tier] || 1);
 
+// --- renown & guild rank ---
+// index of the highest GUILD_RANKS entry the guild's current renown has reached
+function rankIdx() {
+  let idx = 0;
+  for (let i = 0; i < GUILD_RANKS.length; i++) if (GUILD_RANKS[i].at <= state.renown) idx = i;
+  return idx;
+}
+const guildRank = () => GUILD_RANKS[rankIdx()];
+const nextRank = () => GUILD_RANKS[rankIdx() + 1] || null;
+
+// Reconstruct story renown for saves migrated from before renown existed, from
+// existing campaign progress. Practice-mission renown can't be reconstructed
+// (no history of past job-board runs is kept) — that's accepted.
+function retroactiveRenown() {
+  let r = 0;
+  state.campaigns.forEach((cleared, c) => {
+    const missions = CAMPAIGNS[c].missions;
+    for (let i = 0; i < cleared; i++) {
+      r += Math.round(missions[i].cr * CFG.RENOWN_PER_CR * CFG.RENOWN_STORY_MULT) + CFG.RENOWN_FIRST_CLEAR;
+    }
+    if (cleared === 5) r += CFG.RENOWN_CAMPAIGN_COMPLETE;
+  });
+  return r;
+}
+
 const xpToNext = lvl => CFG.XP_PER_LEVEL_STEP * lvl;
 const heroRating = h => h.level * CFG.RATING_PER_LEVEL + h.talent;
 const countClass = (heroes, cls) => heroes.filter(h => h.cls === cls).length;
 
 function partyRating(heroes) {
   let r = heroes.reduce((s, h) => s + heroRating(h), 0);
-  r += countClass(heroes, 'Sorcerer') * CFG.SORCERER_RATING_BONUS;
+  r += powerAgg(heroes).ratingFlat;
   r += relicAgg(heroes).rating;
   return r;
 }
 
 function successChance(heroes, cr) {
   const r = partyRating(heroes);
+  const agg = powerAgg(heroes);
   let p = CFG.SUCCESS_BASE + (r / cr - 1) * CFG.SUCCESS_SLOPE;
-  p += countClass(heroes, 'Fighter') * CFG.FIGHTER_SUCCESS_BONUS;
-  if (cr > r) p += countClass(heroes, 'Wizard') * CFG.WIZARD_UNDERDOG_BONUS;
+  p += agg.successFlat;
+  if (cr > r) p += agg.underdog;
   p += relicAgg(heroes).success;
   return clamp(p, CFG.SUCCESS_MIN, CFG.SUCCESS_MAX);
 }
@@ -734,22 +957,25 @@ function injuryChance(heroes, hero, cr, failed) {
   const r = partyRating(heroes);
   let p = CFG.INJURY_BASE + (cr / r - 1) * CFG.INJURY_SLOPE;
   p = clamp(p, CFG.INJURY_MIN, CFG.INJURY_MAX);
-  p *= Math.pow(CFG.PALADIN_INJURY_MULT, countClass(heroes, 'Paladin'));
+  p *= powerAgg(heroes).partyInjuryMult;
   if (failed) p *= CFG.FAIL_INJURY_MULT;
-  if (hero.cls === 'Barbarian') p *= CFG.BARBARIAN_INJURY_MULT;
-  if (hero.cls === 'Monk' && !failed) p = 0;
+  const hp = heroPower(hero);
+  if (hp) {
+    if (hp.selfInjuryMult != null) p *= hp.selfInjuryMult;
+    if (hp.selfImmuneOnSuccess && !failed) p = 0;
+  }
   const rel = heroRelic(hero); if (rel) p *= (RELICS[rel.key].injuryReduce || 1);
   return clamp(p, 0, 0.95);
 }
 
 function missionDurationMs(hours, heroes) {
-  return hours * H * Math.pow(CFG.RANGER_DURATION_MULT, countClass(heroes, 'Ranger')) * relicAgg(heroes).duration;
+  return hours * H * powerAgg(heroes).durationMult * relicAgg(heroes).duration;
 }
 
-// failed-mission payout fraction, improved by Druids (Nature's Bounty)
+// failed-mission payout fraction, improved by salvage powers (e.g. Nature's Bounty)
 function failFraction(baseFrac, heroes) {
-  const f = baseFrac * Math.pow(CFG.DRUID_SALVAGE_MULT, countClass(heroes, 'Druid'));
-  return Math.min(CFG.DRUID_SALVAGE_CAP, f);
+  const f = baseFrac * powerAgg(heroes).salvageMult;
+  return Math.min(CFG.SALVAGE_CAP, f);
 }
 
 // +X% gold & XP per hero beyond the 4-hero core
@@ -759,7 +985,7 @@ function partySizeBonus(heroes) {
 
 function missionGoldReward(cr, story, heroes, success) {
   let g = cr * CFG.GOLD_PER_CR * (story ? CFG.STORY_REWARD_MULT : 1);
-  g *= 1 + (countClass(heroes, 'Bard') * CFG.BARD_GOLD_BONUS + countClass(heroes, 'Rogue') * CFG.ROGUE_GOLD_BONUS + relicAgg(heroes).gold);
+  g *= 1 + (powerAgg(heroes).goldPct + relicAgg(heroes).gold);
   g *= partySizeBonus(heroes);
   if (!success) g *= failFraction(CFG.FAIL_GOLD_FRAC, heroes);
   return Math.round(g);
@@ -767,9 +993,9 @@ function missionGoldReward(cr, story, heroes, success) {
 
 function missionXpReward(cr, story, heroes, hero, success) {
   let x = cr * CFG.XP_PER_CR * (story ? CFG.STORY_REWARD_MULT : 1);
-  x *= 1 + countClass(heroes, 'Warlock') * CFG.WARLOCK_XP_BONUS + relicAgg(heroes).partyXp;
+  x *= 1 + powerAgg(heroes).partyXpPct + relicAgg(heroes).partyXp;
   x *= partySizeBonus(heroes);
-  if (hero.cls === 'Barbarian') x *= CFG.BARBARIAN_XP_MULT;
+  const hp = heroPower(hero); if (hp && hp.selfXpMult != null) x *= hp.selfXpMult;
   const rel = heroRelic(hero); if (rel) x *= 1 + (RELICS[rel.key].xp || 0);
   if (!success) x *= failFraction(CFG.FAIL_XP_FRAC, heroes);
   return Math.round(x);
@@ -820,8 +1046,11 @@ function resolveMission(m, endTime) {
   const gold = missionGoldReward(cr, story, heroes, success);
   state.gold += gold;
 
-  const clerics = countClass(heroes, 'Cleric');
-  const recoveryMs = CFG.INJURY_DURATION_H * H * Math.pow(CFG.CLERIC_RECOVERY_MULT, clerics);
+  // renown: permanent guild fame, cosmetic-only (gates rank/tabard unlocks)
+  let ren = Math.round(cr * CFG.RENOWN_PER_CR * (story ? CFG.RENOWN_STORY_MULT : 1));
+  if (!success) ren = Math.round(ren * CFG.RENOWN_FAIL_FRAC);
+
+  const recoveryMs = CFG.INJURY_DURATION_H * H * powerAgg(heroes).recoveryMult;
 
   // Aegis: any wardParty relic shields the whole party from injury this mission,
   // then is consumed regardless of whether anyone would have been hurt.
@@ -885,11 +1114,13 @@ function resolveMission(m, endTime) {
     const c = m.story.c, i = m.story.i;
     if (state.campaigns[c] === i) {
       state.campaigns[c] = i + 1;
+      ren += CFG.RENOWN_FIRST_CLEAR;
       const reward = randomRelic(weightedTier(CFG.CAMPAIGN_RELIC_WEIGHTS[c])); // first-clear reward
       state.relics.push(reward); drops.push(reward);
       if (state.campaigns[c] === 5) {
         campaignComplete = CAMPAIGNS[c].name;
         campaignNext = c + 1 < CAMPAIGNS.length ? CAMPAIGNS[c + 1].name : null;
+        ren += CFG.RENOWN_CAMPAIGN_COMPLETE;
         const legend = randomRelic('legendary'); // campaign completion bonus
         state.relics.push(legend); drops.push(legend);
         log(`🏆 Campaign complete: “${campaignComplete}”!` + (campaignNext ? ` “${campaignNext}” is now open.` : ' Your guild’s legend is complete.'));
@@ -897,8 +1128,13 @@ function resolveMission(m, endTime) {
     }
   }
 
-  const per = heroes.length ? missionXpReward(cr, story, heroes, heroes.find(h => h.cls !== 'Barbarian') || heroes[0], success) : 0;
-  log(`${success ? '✅ Victory' : '❌ Failure'} — “${m.name}”: +${gold} gold, ~${per} XP each.`);
+  const rankBefore = rankIdx();
+  state.renown += ren;
+  const rankedUp = rankIdx() > rankBefore ? guildRank().name : null;
+
+  const per = heroes.length ? missionXpReward(cr, story, heroes, representativeHero(heroes), success) : 0;
+  log(`${success ? '✅ Victory' : '❌ Failure'} — “${m.name}”: +${gold} gold, ~${per} XP each, +${ren} renown.`);
+  if (rankedUp) log(`🏅 The realm takes notice — ${state.guildName || 'the guild'} is now “${rankedUp}”!`);
   relicEvents.forEach(ev => log(relicEventLog(ev)));
   hurt.forEach(n => log(`🩹 ${n} was injured (out ${fmtDur(recoveryMs)}, +1 mark).`));
   fallen.forEach(n => log(`☠ ${n} has died of their wounds. The guild will remember.`));
@@ -912,6 +1148,7 @@ function resolveMission(m, endTime) {
     injured: hurt.slice(), fallen: fallen.slice(), leveled,
     relicEvents, relicDrops: drops.map(d => ({ name: RELICS[d.key].name, icon: RELICS[d.key].icon, tier: d.tier })),
     campaignComplete, campaignNext,
+    renown: ren, rankUp: rankedUp,
   });
 }
 
@@ -1083,7 +1320,11 @@ function applyImport(text) {
   if (typeof state.gold !== 'number') state.gold = 0;
   if (!Array.isArray(state.relics)) state.relics = [];
   if (!state.shop || !Array.isArray(state.shop.relics)) state.shop = { relics: [], expires: 0 };
+  if (state.tabard === undefined) state.tabard = null;
+  if (typeof state.renown !== 'number') state.renown = retroactiveRenown();
   if (!state.nextId) state.nextId = Math.max(0, ...state.heroes.map(h => h.id || 0)) + 1;
+  state.heroes.forEach(ensureHeroPower);
+  (state.recruits || []).forEach(ensureHeroPower);
   processEvents(now);
   if (!Array.isArray(state.recruits) || !state.recruits.length) refreshRecruitPool();
   autoRefreshRecruits(now);
@@ -1168,6 +1409,8 @@ function fmtWhen(t) {
 }
 function chanceClass(p) { return p >= 0.75 ? 'green' : p >= 0.45 ? 'yellow' : 'red'; }
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+// escape a string for safe embedding inside a single-quoted HTML attribute (e.g. inline onclick JSON)
+function escAttr(s) { return String(s).replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;'); }
 
 /* =====================================================================
  *  UI STATE & RENDERING
@@ -1185,6 +1428,9 @@ const ui = {
   dataModal: false,   // backup & restore panel
   equipRelic: null,   // relicId being assigned to a hero (Inventory → hero)
   equipHero: null,    // heroId choosing a relic (Roster → relic)
+  confirmReset: false, // reset-all-data confirmation
+  invTab: 'open',     // 'open' | 'equipped' — Inventory sub-tab
+  tabardEditor: null, // working copy {pattern,c1,c2,emblem} while designing the guild tabard
 };
 
 const $ = id => document.getElementById(id);
@@ -1207,7 +1453,7 @@ function renderHeader() {
   state.rests.forEach(r => { const h = heroById(r.heroId); if (h) chips.push(`<span class="chip">🛌 <b>${esc(h.name.split(' ')[0])}</b> <span class="cd" data-cd="${r.end}"></span></span>`); });
   state.heroes.forEach(h => { if (h.status === 'injured') chips.push(`<span class="chip">🩹 <b>${esc(h.name.split(' ')[0])}</b> <span class="cd" data-cd="${h.injuredUntil}"></span></span>`); });
   $('header').innerHTML = `
-    <div class="brand">⚜ LFG<small>${state.guildName ? esc(state.guildName) : 'guildmaster'}</small></div>
+    <div class="brand">⚜ LFG<small>${state.guildName ? esc(state.guildName) : 'guildmaster'}</small>${state.guildName ? `<small style="font-size:10px; color:var(--muted)">${esc(guildRank().name)}</small>` : ''}</div>
     <div class="goldbox">🪙 ${state.gold}</div>
     <div class="timers">${chips.join('') || '<span class="chip">All quiet — everyone is home.</span>'}</div>
     <button class="ghost" onclick="A.toggleDrawer()">📜 Chronicle</button>`;
@@ -1265,10 +1511,16 @@ function heroCard(h, actions) {
     </div>
     ${xpBar}
     <div style="margin:4px 0">${heroStatusHtml(h)}</div>
-    <div class="ability"><b>${c.aName}:</b> ${c.aDesc()}</div>
+    ${powerLineHtml(h)}
     ${relicLineHtml(h)}
     ${actions ? `<div class="row" style="margin-top:8px">${actions}</div>` : ''}
   </div>`;
+}
+
+// one-line summary of a hero's class power
+function powerLineHtml(h) {
+  const p = heroPower(h);
+  return p ? `<div class="ability"><b>${esc(p.name)}:</b> ${esc(p.desc)}</div>` : '';
 }
 
 // one-line summary of a hero's equipped relic (or nothing)
@@ -1278,6 +1530,15 @@ function relicLineHtml(h) {
   const t = RELICS[r.key];
   const ch = t.ward ? ` <span class="sub">(${r.charges}/${t.ward})</span>` : '';
   return `<div class="ability"><span class="${'q-' + r.tier}">${t.icon} ${esc(t.name)}</span>${ch} — <span class="sub">${relicEffectText(r.key)}</span></div>`;
+}
+
+// compact one-line relic summary for tight spaces (e.g. the party picker) — no effect text
+function relicCompactHtml(h) {
+  const r = heroRelic(h);
+  if (!r) return '';
+  const t = RELICS[r.key];
+  const ch = t.ward ? ` (${r.charges}/${t.ward})` : '';
+  return `<div class="sub"><span class="${'q-' + r.tier}">${t.icon} ${esc(t.name)}</span>${ch}</div>`;
 }
 
 function heroActions(h) {
@@ -1340,6 +1601,65 @@ function relicCard(r, actions, opts) {
   </div>`;
 }
 
+/* ---------- guild tabard ---------- */
+// Renders a heater-shield tabard as an inline SVG. `t` is {pattern,c1,c2,emblem} or
+// null (renders a muted placeholder). A counter keeps clipPath ids unique across calls
+// so two tabards rendered on the same page (e.g. Keep card + editor preview) don't collide.
+let tabardClipCounter = 0;
+const TABARD_SHIELD_PATH = 'M8 6 H92 V48 C92 78 50 104 50 104 C50 104 8 78 8 48 Z';
+function tabardSvg(t, size) {
+  const d = t || { pattern: 'solid', c1: '#3d3524', c2: '#3d3524', emblem: '' };
+  const clipId = 'tabardClip' + (++tabardClipCounter);
+  let fill;
+  switch (d.pattern) {
+    case 'pale':    fill = `<rect x="0" y="0" width="50" height="110" fill="${d.c1}"/><rect x="50" y="0" width="50" height="110" fill="${d.c2}"/>`; break;
+    case 'fess':    fill = `<rect x="0" y="0" width="100" height="55" fill="${d.c1}"/><rect x="0" y="55" width="100" height="55" fill="${d.c2}"/>`; break;
+    case 'bend':    fill = `<rect x="0" y="0" width="100" height="110" fill="${d.c1}"/><polygon points="0,0 100,0 100,110" fill="${d.c2}"/>`; break;
+    case 'chevron': fill = `<rect x="0" y="0" width="100" height="110" fill="${d.c1}"/><polygon points="0,110 50,55 100,110" fill="${d.c2}"/>`; break;
+    case 'quarter': fill = `<rect x="0" y="0" width="50" height="55" fill="${d.c1}"/><rect x="50" y="0" width="50" height="55" fill="${d.c2}"/><rect x="0" y="55" width="50" height="55" fill="${d.c2}"/><rect x="50" y="55" width="50" height="55" fill="${d.c1}"/>`; break;
+    case 'paly':    fill = `<rect x="0" y="0" width="100" height="110" fill="${d.c1}"/><rect x="25" y="0" width="25" height="110" fill="${d.c2}"/><rect x="75" y="0" width="25" height="110" fill="${d.c2}"/>`; break;
+    case 'cross':   fill = `<rect x="0" y="0" width="100" height="110" fill="${d.c1}"/><rect x="40" y="0" width="20" height="110" fill="${d.c2}"/><rect x="0" y="40" width="100" height="20" fill="${d.c2}"/>`; break;
+    case 'bordure': fill = `<rect x="0" y="0" width="100" height="110" fill="${d.c2}"/><rect x="14" y="14" width="72" height="82" fill="${d.c1}"/>`; break;
+    case 'saltire': fill = `<rect x="0" y="0" width="100" height="110" fill="${d.c1}"/><polygon points="0,0 18,0 100,92 100,110 82,110 0,18" fill="${d.c2}"/><polygon points="82,0 100,0 100,18 18,110 0,110 0,92" fill="${d.c2}"/>`; break;
+    default:        fill = `<rect x="0" y="0" width="100" height="110" fill="${d.c1}"/>`; // solid
+  }
+  return `<svg viewBox="0 0 100 110" width="${size}" height="${Math.round(size * 1.1)}" xmlns="http://www.w3.org/2000/svg">
+    <defs><clipPath id="${clipId}"><path d="${TABARD_SHIELD_PATH}"/></clipPath></defs>
+    <g clip-path="url(#${clipId})">${fill}</g>
+    <path d="${TABARD_SHIELD_PATH}" fill="none" stroke="#0d0b08" stroke-width="3"/>
+    ${d.emblem ? `<text x="50" y="52" text-anchor="middle" dominant-baseline="central" font-size="34">${d.emblem}</text>` : ''}
+  </svg>`;
+}
+
+// cosmetic unlock gating — compares each table's minRank against the guild's current rank
+const patternUnlocked = key => TABARD_PATTERNS[key].minRank <= rankIdx();
+const colorUnlocked = i => TABARD_COLOR_MIN_RANK[i] <= rankIdx();
+const emblemUnlocked = i => TABARD_EMBLEM_MIN_RANK[i] <= rankIdx();
+
+// renown & guild rank card — shown on the Keep, directly under the guild card
+function renownCardHtml() {
+  const idx = rankIdx(), rank = guildRank(), nr = nextRank();
+  let html = `<div class="card">
+    <div>⭐ Renown <b>${state.renown}</b> · <b class="gold-t">${esc(rank.name)}</b></div>`;
+  if (nr) {
+    const filled = clamp((state.renown - rank.at) / (nr.at - rank.at) * 100, 0, 100);
+    const nextIdx = idx + 1;
+    const unlockPatterns = Object.values(TABARD_PATTERNS).filter(p => p.minRank === nextIdx).length;
+    const unlockColors = TABARD_COLOR_MIN_RANK.filter(m => m === nextIdx).length;
+    const unlockEmblemIdx = TABARD_EMBLEM_MIN_RANK.map((m, i) => m === nextIdx ? i : -1).filter(i => i >= 0);
+    const bits = [];
+    if (unlockPatterns) bits.push(`${unlockPatterns} pattern${unlockPatterns > 1 ? 's' : ''}`);
+    if (unlockColors) bits.push(`${unlockColors} color${unlockColors > 1 ? 's' : ''}`);
+    if (unlockEmblemIdx.length) bits.push(`${unlockEmblemIdx.length} emblem${unlockEmblemIdx.length > 1 ? 's' : ''} (${unlockEmblemIdx.map(i => TABARD_EMBLEMS[i]).join(' ')})`);
+    html += `<div class="bar"><div style="width:${filled}%"></div></div>
+      <div class="sub">${esc(nr.name)} at ${nr.at} renown${bits.length ? ` — Unlocks: ${bits.join(', ')}` : ''}</div>`;
+  } else {
+    html += `<div class="sub">The realm knows no higher honor.</div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
 /* ---------- Keep ---------- */
 function renderKeep() {
   const lvl = state.keepLevel;
@@ -1347,8 +1667,12 @@ function renderKeep() {
   let html = `<h2>🏰 The Keep — Level ${lvl}</h2>
   <div class="card">
     <div class="spread" style="margin-bottom:8px">
-      <div>Guild: <b class="gold-t">${state.guildName ? esc(state.guildName) : 'Unnamed'}</b></div>
       <div class="row">
+        ${tabardSvg(state.tabard, 44)}
+        <div>Guild: <b class="gold-t">${state.guildName ? esc(state.guildName) : 'Unnamed'}</b></div>
+      </div>
+      <div class="row">
+        <button class="ghost" onclick="A.openTabard()">🎨 ${state.tabard ? 'Edit' : 'Design'} tabard</button>
         <button class="ghost" onclick="A.openRename()">✍ Rename guild — ${CFG.GUILD_RENAME_COST}g</button>
         <button class="ghost" onclick="A.openData()">💾 Backup / Restore</button>
       </div>
@@ -1367,6 +1691,9 @@ function renderKeep() {
       </div>
     </div>
   </div>`;
+
+  // renown & guild rank
+  html += renownCardHtml();
 
   // training
   html += `<h3>🎓 Training Yard <span class="sub">(${CFG.TRAINING_XP_PER_HOUR} XP/hour, sessions end after ${CFG.TRAINING_CAP_H}h — the safe, slow path)</span></h3>`;
@@ -1429,7 +1756,7 @@ function renderTavern() {
     html += `<div class="card">
       <div class="spread"><b>${esc(r.name)}</b> <span class="tag ${c.role}">${ROLE_ICON[c.role]} ${r.cls}</span></div>
       <div class="sub">Level ${r.level} · Rating ${heroRating(r)} · Talent +${r.talent}</div>
-      <div class="ability"><b>${c.aName}:</b> ${c.aDesc()}</div>
+      ${powerLineHtml(r)}
       <div class="row" style="margin-top:8px">
         <button class="act" ${state.gold < r.cost || full ? 'disabled' : ''} onclick="A.recruitHero(${i})">Recruit — ${r.cost}g</button>
         ${full ? '<span class="sub red">Roster full — upgrade the Keep</span>' : ''}
@@ -1471,9 +1798,9 @@ function missionRow(def, story, statusHtml) {
         <div class="flavor">${esc(def.flavor)}</div>
         ${def.expires ? `<div class="sub">Leaves the board in <span class="cd" data-cd="${def.expires}"></span></div>` : ''}
       </div>
-      <div style="text-align:right; min-width:130px">
+      <div class="m-side" style="text-align:right; min-width:130px">
         ${statusHtml !== undefined ? statusHtml :
-          `<button class="act" ${canStaff ? '' : 'disabled'} onclick='A.openPicker(${JSON.stringify(JSON.stringify({ def: { name: def.name, cr: def.cr, hours: def.hours, size, flavor: def.flavor }, story }))})'>Send party</button>
+          `<button class="act" ${canStaff ? '' : 'disabled'} onclick='A.openPicker(${escAttr(JSON.stringify(JSON.stringify({ def: { name: def.name, cr: def.cr, hours: def.hours, size, flavor: def.flavor }, story })))})'>Send party</button>
            ${canStaff ? '' : `<div class="sub">Need ${size} ready (min 1 tank, 1 healer, 2 DPS)</div>`}`}
       </div>
     </div>
@@ -1556,12 +1883,23 @@ function renderReliquary() {
 /* ---------- Inventory (relic management) ---------- */
 function renderInventory() {
   const relics = state.relics;
+  const openCount = relics.filter(r => !r.equippedBy).length;
+  const equippedCount = relics.filter(r => r.equippedBy).length;
   let html = `<h2>🎒 Inventory <span class="sub">${relics.length} relic${relics.length !== 1 ? 's' : ''}</span></h2>
-    <div class="sub" style="margin-bottom:10px">Each hero equips one relic; its effect applies automatically on missions. Consumable relics break when their charges run out.</div>`;
-  if (!relics.length) { html += '<div class="empty">No relics yet. Earn them on missions, complete campaign chapters, or buy them at the Reliquary.</div>'; return html; }
+    <div class="sub" style="margin-bottom:10px">Each hero equips one relic; its effect applies automatically on missions. Consumable relics break when their charges run out.</div>
+    <div class="row" style="margin-bottom:10px">
+      <button class="subtab ${ui.invTab === 'open' ? 'active' : ''}" onclick="A.setInvTab('open')">🟢 Available (${openCount})</button>
+      <button class="subtab ${ui.invTab === 'equipped' ? 'active' : ''}" onclick="A.setInvTab('equipped')">🎽 Equipped (${equippedCount})</button>
+    </div>`;
   const order = { legendary: 0, rare: 1, magic: 2, common: 3 };
-  const sorted = relics.slice().sort((a, b) =>
-    (a.equippedBy ? 1 : 0) - (b.equippedBy ? 1 : 0) || order[a.tier] - order[b.tier]);
+  const filtered = relics.filter(r => ui.invTab === 'equipped' ? r.equippedBy : !r.equippedBy);
+  const sorted = filtered.slice().sort((a, b) => order[a.tier] - order[b.tier]);
+  if (!sorted.length) {
+    html += ui.invTab === 'equipped'
+      ? '<div class="empty">No relics equipped. Equip one from the Available tab.</div>'
+      : '<div class="empty">No unequipped relics. Earn them on missions or buy them at the Reliquary.</div>';
+    return html;
+  }
   html += '<div class="grid">';
   sorted.forEach(r => {
     const acts = [];
@@ -1586,6 +1924,8 @@ function renderModal() {
   if (ui.awayMsgs) { root.innerHTML = awayModal(); return; }
   if (ui.briefings.length) { root.innerHTML = briefingModal(); return; }
   if (ui.dataModal) { root.innerHTML = dataModal(); return; }
+  if (ui.tabardEditor) { root.innerHTML = tabardEditorModal(); return; }
+  if (ui.confirmReset) { root.innerHTML = resetModal(); return; }
   if (ui.confirmDismiss != null) { root.innerHTML = dismissModal(); return; }
   if (ui.equipRelic != null) { root.innerHTML = equipRelicModal(); return; }
   if (ui.equipHero != null) { root.innerHTML = equipHeroModal(); return; }
@@ -1631,7 +1971,8 @@ function briefingModal() {
     : '<div style="font-size:22px" class="red">❌ Mission Failed</div>';
   let body = `<div class="preview">
     <div class="row"><span>💰 Gold brought home: <b class="gold-t">${b.gold}</b></span></div>
-    <div class="row sub"><span>✨ Experience: ~${b.xpEach} XP to each of the ${b.partySize} heroes${b.success ? '' : ' (reduced — the mission failed)'}</span></div>`;
+    <div class="row sub"><span>✨ Experience: ~${b.xpEach} XP to each of the ${b.partySize} heroes${b.success ? '' : ' (reduced — the mission failed)'}</span></div>
+    <div class="row"><span class="gold-t">⭐ Renown: +${b.renown}</span></div>`;
   if (b.leveled.length) body += `<div class="row"><span class="blue">⭐ Level up: ${b.leveled.map(l => `${esc(l.name)} → Lv ${l.level}`).join(', ')}</span></div>`;
   if (b.injured.length) body += `<div class="row"><span class="yellow">🩹 Injured (out ${b.recoveryTxt}, +1 mark): ${b.injured.map(esc).join(', ')}</span></div>`;
   if (b.fallen.length) body += `<div class="row"><span class="red">☠ Fallen — lost forever: ${b.fallen.map(esc).join(', ')}</span></div>`;
@@ -1639,6 +1980,7 @@ function briefingModal() {
   (b.relicEvents || []).forEach(ev => body += `<div class="row"><span class="blue">${esc(relicEventLog(ev))}</span></div>`);
   (b.relicDrops || []).forEach(d => body += `<div class="row"><span class="q-${d.tier}">🎁 Relic acquired: ${d.icon} ${esc(d.name)} (${RELIC_TIERS[d.tier].name})</span></div>`);
   if (b.campaignComplete) body += `<div class="row"><span class="gold-t">🏆 Campaign complete: “${esc(b.campaignComplete)}”!${b.campaignNext ? ` “${esc(b.campaignNext)}” is now open.` : ''}</span></div>`;
+  if (b.rankUp) body += `<div class="row"><span class="gold-t">🏅 New rank: “${esc(b.rankUp)}” — new tabard options may be unlocked!</span></div>`;
   body += '</div>';
   return `<div id="modal-wrap" onclick="if(event.target.id==='modal-wrap')A.nextBriefing()"><div class="modal">
     <div class="sub">Mission report${b.story ? ' · story' : ''}</div>
@@ -1684,6 +2026,48 @@ function dataModal() {
   </div></div>`;
 }
 
+// Keep → design/edit the guild's heraldic tabard. Works on a scratch copy (ui.tabardEditor)
+// so Cancel discards changes; picker clicks update the copy and re-render the modal only.
+function tabardEditorModal() {
+  const d = ui.tabardEditor;
+  const patternBtns = Object.keys(TABARD_PATTERNS).map(k => {
+    const p = TABARD_PATTERNS[k], unlocked = patternUnlocked(k);
+    return `<button class="subtab ${d.pattern === k ? 'active' : ''}" ${unlocked ? '' : 'disabled'}
+      style="${unlocked ? '' : 'opacity:.35'}" title="${unlocked ? '' : 'Unlocks at ' + esc(GUILD_RANKS[p.minRank].name)}"
+      onclick="A.setTabardPattern('${k}')">${unlocked ? '' : '🔒 '}${esc(p.name)}</button>`;
+  }).join('');
+  const swatchRow = (field, selected) => TABARD_COLORS.map((c, i) => {
+    const unlocked = colorUnlocked(i);
+    return `<button onclick="A.setTabardColor('${field}', ${i})" ${unlocked ? '' : 'disabled'}
+      title="${unlocked ? c : 'Unlocks at ' + esc(GUILD_RANKS[TABARD_COLOR_MIN_RANK[i]].name)}"
+      style="width:26px; height:26px; border-radius:5px; cursor:pointer; background:${c}; border:2px solid ${selected === c ? 'var(--gold)' : 'var(--border)'}; ${unlocked ? '' : 'opacity:.35'}"></button>`;
+  }).join('');
+  const emblemBtns = TABARD_EMBLEMS.map((e, i) => {
+    const unlocked = emblemUnlocked(i);
+    return `<button onclick="A.setTabardEmblem(${i})" ${unlocked ? '' : 'disabled'}
+      title="${unlocked ? '' : 'Unlocks at ' + esc(GUILD_RANKS[TABARD_EMBLEM_MIN_RANK[i]].name)}"
+      style="font-size:20px; padding:4px 9px; border-radius:5px; cursor:pointer; background:${d.emblem === e ? 'var(--panel2)' : 'none'}; border:1px solid ${d.emblem === e ? 'var(--gold)' : 'var(--border)'}; ${unlocked ? '' : 'opacity:.35'}">${e}</button>`;
+  }).join('');
+  return `<div id="modal-wrap" onclick="if(event.target.id==='modal-wrap')A.closeTabard()"><div class="modal">
+    <h2>🎨 Design your tabard</h2>
+    <div class="sub">More patterns, colors, and emblems unlock as your guild's renown grows.</div>
+    <div style="text-align:center; margin:10px 0">${tabardSvg(d, 96)}</div>
+    <h3 style="margin-top:0">Pattern</h3>
+    <div class="row">${patternBtns}</div>
+    <h3>Colors</h3>
+    <div class="sub">Field</div>
+    <div class="row" style="margin-bottom:6px">${swatchRow('c1', d.c1)}</div>
+    <div class="sub">Accent</div>
+    <div class="row">${swatchRow('c2', d.c2)}</div>
+    <h3>Emblem</h3>
+    <div class="row">${emblemBtns}</div>
+    <div class="spread" style="margin-top:14px">
+      <button class="ghost" onclick="A.closeTabard()">Cancel</button>
+      <button class="act" onclick="A.saveTabard()">Raise the banner</button>
+    </div>
+  </div></div>`;
+}
+
 // Inventory → choose which hero gets this relic
 function equipRelicModal() {
   const r = state.relics.find(x => x.id === ui.equipRelic);
@@ -1720,6 +2104,20 @@ function equipHeroModal() {
       <div class="sub">${relicEffectText(r.key)}</div></span>
     </div>`).join('') || '<div class="empty">No unequipped relics. Find or buy some first.</div>'}
     <div style="text-align:right; margin-top:10px"><button class="ghost" onclick="A.closeEquipHero()">Close</button></div>
+  </div></div>`;
+}
+
+function resetModal() {
+  return `<div id="modal-wrap" onclick="if(event.target.id==='modal-wrap')A.cancelReset()"><div class="modal">
+    <h2 class="red">⟲ Reset all data?</h2>
+    <div class="preview">
+      <div>This permanently deletes <b>${state.guildName ? esc(state.guildName) : 'your guild'}</b> — every hero, relic, and all progress — and starts a brand-new game.</div>
+      <div class="sub red" style="margin-top:6px">This cannot be undone. If you might want your guild back, export a backup first (Keep → Backup / Restore).</div>
+    </div>
+    <div class="spread" style="margin-top:12px">
+      <button class="ghost" onclick="A.cancelReset()">Cancel</button>
+      <button class="act" style="background:var(--red)" onclick="A.doReset()">Delete everything</button>
+    </div>
   </div></div>`;
 }
 
@@ -1770,7 +2168,9 @@ function pickerModal() {
     roles[role].forEach(h => {
       const sel = ui.picked.includes(h.id);
       rows += `<div class="pick-row ${sel ? 'sel' : ''}" onclick="A.togglePick(${h.id})">
-        <span class="nm"><b>${esc(h.name)}</b> <span class="sub">Lv ${h.level} ${h.cls} · Rating ${heroRating(h)}</span></span>
+        <span class="nm"><b>${esc(h.name)}</b> <span class="sub">Lv ${h.level} ${h.cls} · Rating ${heroRating(h)}</span>
+        ${powerLineHtml(h)}
+        ${relicCompactHtml(h)}</span>
         ${h.marks === CFG.MAX_MARKS - 1 ? '<span class="red" title="One more injury kills this hero">⚠ 2 marks</span>' : marksHtml(h)}
       </div>`;
     });
@@ -1790,7 +2190,7 @@ function pickerModal() {
         <div class="row"><span>Success chance: <b class="${chanceClass(sc)}">${pct(sc)}</b></span>
         <span>Duration: <b>${fmtDur(dur)}</b></span></div>
         <div class="row sub"><span>Injury risk per hero: ~${pct(avg(injS))} on success, ~${pct(avg(injF))} on failure</span></div>
-        <div class="row sub"><span>Reward: ~${missionGoldReward(def.cr, !!story, picked, true)}g · ~${missionXpReward(def.cr, !!story, picked, picked.find(h => h.cls !== 'Barbarian') || picked[0], true)} XP each (partial on failure)</span></div>
+        <div class="row sub"><span>Reward: ~${missionGoldReward(def.cr, !!story, picked, true)}g · ~${missionXpReward(def.cr, !!story, picked, representativeHero(picked), true)} XP each (partial on failure)</span></div>
         ${(() => { const rl = picked.map(heroRelic).filter(Boolean); return rl.length ? `<div class="row sub"><span>Relics in play: ${rl.map(r => `<span class="q-${r.tier}">${RELICS[r.key].icon} ${esc(RELICS[r.key].name)}</span>`).join(', ')}</span></div>` : ''; })()}`;
     } else if (picked.length < size) {
       inner += `<div class="sub">Pick ${size - picked.length} more…</div>`;
@@ -1876,6 +2276,16 @@ const A = {
   cancelDismiss() { ui.confirmDismiss = null; renderModal(); },
   confirmDismissHero() { const id = ui.confirmDismiss; ui.confirmDismiss = null; dismissHero(id); render(); },
 
+  // --- reset all data ---
+  askReset() { ui.confirmReset = true; renderModal(); },
+  cancelReset() { ui.confirmReset = false; renderModal(); },
+  doReset() {
+    ui.confirmReset = false;
+    try { window.removeEventListener('beforeunload', save); } catch (e) { /* ignore */ }
+    try { localStorage.removeItem(CFG.SAVE_KEY); } catch (e) { /* ignore */ }
+    location.reload(); // boot() starts a fresh game and prompts for a new guild name
+  },
+
   // --- backup & restore ---
   openData() { ui.dataModal = true; renderModal(); },
   closeData() { ui.dataModal = false; renderModal(); },
@@ -1937,6 +2347,7 @@ const A = {
     save(); render();
   },
   unequipRelic, sellRelic,
+  setInvTab(t) { ui.invTab = t; render(); },
   openEquip(id) { ui.equipRelic = id; renderModal(); },
   closeEquip() { ui.equipRelic = null; renderModal(); },
   doEquipToHero(heroId) { equipRelic(ui.equipRelic, heroId); ui.equipRelic = null; render(); },
@@ -1983,6 +2394,27 @@ const A = {
   assignTraining(id) { assignTraining(id); render(); },
   assignRest(id) { assignRest(id); render(); },
   recallTraining, cancelRest, healMark, recruitHero, payRefreshRecruits, upgradeKeep,
+
+  // --- guild tabard ---
+  openTabard() {
+    ui.tabardEditor = state.tabard
+      ? Object.assign({}, state.tabard)
+      : { pattern: 'pale', c1: TABARD_COLORS[0], c2: TABARD_COLORS[3], emblem: '🦁' }; // c2 defaults to gold (#d4a72c)
+    renderModal();
+  },
+  closeTabard() { ui.tabardEditor = null; renderModal(); },
+  setTabardPattern(p) { if (ui.tabardEditor && patternUnlocked(p)) { ui.tabardEditor.pattern = p; renderModal(); } },
+  setTabardColor(field, idx) { if (ui.tabardEditor && colorUnlocked(idx)) { ui.tabardEditor[field] = TABARD_COLORS[idx]; renderModal(); } },
+  setTabardEmblem(idx) { if (ui.tabardEditor && emblemUnlocked(idx)) { ui.tabardEditor.emblem = TABARD_EMBLEMS[idx]; renderModal(); } },
+  saveTabard() {
+    if (!ui.tabardEditor) return;
+    const firstTime = !state.tabard;
+    state.tabard = Object.assign({}, ui.tabardEditor);
+    ui.tabardEditor = null;
+    log(`🎨 The guild's tabard is ${firstTime ? 'raised' : 'redesigned'} above the Keep.`);
+    save();
+    render();
+  },
 };
 window.A = A;
 
@@ -2018,7 +2450,11 @@ function tick() {
     if (typeof state.guildName !== 'string') state.guildName = '';
     if (!Array.isArray(state.relics)) state.relics = [];
     if (!state.shop || !Array.isArray(state.shop.relics)) state.shop = { relics: [], expires: 0 };
+    if (state.tabard === undefined) state.tabard = null;
+    if (typeof state.renown !== 'number') state.renown = retroactiveRenown();
     if (!Array.isArray(ui.briefings)) ui.briefings = [];
+    state.heroes.forEach(ensureHeroPower);           // heroes from before powers existed
+    (state.recruits || []).forEach(ensureHeroPower);
     const away = now - (state.lastSeen || now);
     const logBefore = state.log.length;
     const processed = processEvents(now);
@@ -2041,7 +2477,7 @@ function tick() {
   setInterval(tick, 1000);
   window.addEventListener('beforeunload', save);
   // debug handle (harmless in normal play)
-  window.LFG = { get state() { return state; }, get ui() { return ui; }, save, processEvents, render, refreshJobBoard, autoRefreshRecruits, refreshShop, makeRelic, startMission, RELICS, CFG };
+  window.LFG = { get state() { return state; }, get ui() { return ui; }, save, processEvents, render, refreshJobBoard, autoRefreshRecruits, refreshShop, makeRelic, startMission, RELICS, CFG, rankIdx, guildRank };
 })();
 </script>
 </body>
