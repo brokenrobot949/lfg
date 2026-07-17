@@ -150,7 +150,11 @@
   /* ---------- mobile ---------- */
   @media (max-width: 640px) {
     #app { padding: 0 10px 60px; }
-    header { position: static; }
+    header { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 10px; position: static; }
+    .brand { grid-column: 1; }
+    .goldbox { grid-column: 2; justify-self: end; }
+    .timers { grid-column: 1; min-width: 0; }
+    header > button.ghost { grid-column: 2; }
     nav { top: 0; }
     nav button { flex: 1 1 auto; text-align: center; padding: 10px 6px; font-size: 14px; }
     button.act, button.ghost { padding: 10px 14px; font-size: 14px; }
@@ -205,7 +209,7 @@ const CFG = {
   INJURY_MIN: 0.01,
   INJURY_MAX: 0.65,
   FAIL_INJURY_MULT: 1.75,       // injuries are likelier on failed missions
-  INJURY_DURATION_H: 8,         // hours a hero is unavailable after an injury
+  INJURY_DURATION_H: 2,         // hours a hero is unavailable after an injury
   MAX_MARKS: 3,                 // marks at which a hero dies forever
 
   // --- mission rewards ---
@@ -222,7 +226,7 @@ const CFG = {
   TRAINING_CAP_H: 8,            // a training session ends after this many hours
 
   // --- rest ---
-  REST_DURATION_H: 16,          // removes one injury mark on completion
+  REST_DURATION_H: 8,           // removes one injury mark on completion
 
   // --- infirmary ---
   INFIRMARY_BASE_COST: 150,     // gold to remove one mark instantly...
@@ -1757,9 +1761,12 @@ function renownCardHtml() {
   return html;
 }
 
-// legacy / prestige card — shown on the Keep, directly under the renown card
+// legacy / prestige card — shown on the Keep, directly under the renown card.
+// Hidden entirely until the final campaign is beaten (or a charter has already
+// been retired), so it doesn't clutter a first playthrough that can't use it yet.
 function legacyCardHtml() {
   const lg = state.legacy;
+  if (lg.ascensions === 0 && !charterEligible()) return '';
   let html = `<div class="card">
     <div class="spread">
       <div>⚜ Charter <b>${roman(lg.ascensions + 1)}</b> · Legacy points: <b class="gold-t">${lg.points}</b></div>
@@ -1768,9 +1775,6 @@ function legacyCardHtml() {
         ${charterEligible() ? '<button class="act" onclick="A.askRetire()">🏆 Retire the Charter</button>' : ''}
       </div>
     </div>`;
-  if (lg.ascensions === 0 && !charterEligible()) {
-    html += '<div class="sub">Fell the Worldworm to retire the charter and earn Legacy.</div>';
-  }
   html += '</div>';
   return html;
 }
@@ -2093,6 +2097,7 @@ function guildModal() {
   const canAfford = !rename || state.gold >= CFG.GUILD_RENAME_COST;
   return `<div id="modal-wrap"><div class="modal">
     <h2>${rename ? '✍ Rename your guild' : '⚜ Name your guild'}</h2>
+    ${rename ? '' : '<div class="flavor" style="margin-bottom:10px">The old age ended in fire and flood. Now the roads crawl with monsters, the crowns pay gold for courage, and adventurers drift from tavern to tavern — looking for group. You\'ve bought a keep, hung out a sign, and sworn to build something that outlives you.</div>'}
     <div class="sub" style="margin-bottom:10px">${rename
       ? `A fresh name costs <b class="gold-t">${CFG.GUILD_RENAME_COST} gold</b> in new banners and seals.`
       : 'Every great guild needs a name to strike fear (or at least mild recognition) into the realm.'}</div>
