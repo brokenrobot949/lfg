@@ -258,8 +258,8 @@ const CFG = {
 
   // --- the Tavern ---
   RECRUIT_POOL_SIZE: 4,
-  RECRUIT_LIFETIME_MIN_H: 12,   // the hire board reshuffles itself every...
-  RECRUIT_LIFETIME_MAX_H: 18,   // ...12–18 hours on its own
+  RECRUIT_LIFETIME_MIN_H: 4,    // the hire board reshuffles itself every...
+  RECRUIT_LIFETIME_MAX_H: 8,    // ...4–8 hours on its own
   GUILD_RENAME_COST: 100,       // gold to rename the guild after founding
   RECRUIT_REFRESH_COST: 25,
   RECRUIT_COST_BASE: 40,
@@ -1510,6 +1510,12 @@ function chanceClass(p) { return p >= 0.75 ? 'green' : p >= 0.45 ? 'yellow' : 'r
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 // escape a string for safe embedding inside a single-quoted HTML attribute (e.g. inline onclick JSON)
 function escAttr(s) { return String(s).replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;'); }
+// a small gold coin, drawn inline so it reads as gold (the 🪙 emoji renders silver on many platforms)
+function coin(size = 15) {
+  return `<svg viewBox="0 0 20 20" width="${size}" height="${size}" style="vertical-align:-2px" aria-hidden="true">
+    <circle cx="10" cy="10" r="9" fill="var(--gold)" stroke="#a37d1a" stroke-width="1.5"/>
+    <circle cx="10" cy="10" r="5.5" fill="none" stroke="#a37d1a" stroke-width="1" opacity="0.7"/></svg>`;
+}
 
 /* =====================================================================
  *  UI STATE & RENDERING
@@ -1555,7 +1561,7 @@ function renderHeader() {
   state.heroes.forEach(h => { if (h.status === 'injured') chips.push(`<span class="chip">🩹 <b>${esc(h.name.split(' ')[0])}</b> <span class="cd" data-cd="${h.injuredUntil}"></span></span>`); });
   $('header').innerHTML = `
     <div class="brand">⚜ LFG<small>${state.guildName ? esc(state.guildName) : 'guildmaster'}</small>${state.guildName ? `<small style="font-size:10px; color:var(--muted)">${esc(guildRank().name)}</small>` : ''}</div>
-    <div class="goldbox">🪙 ${state.gold}</div>
+    <div class="goldbox">${coin(16)} ${state.gold}</div>
     <div class="timers">${chips.join('') || '<span class="chip">All quiet — everyone is home.</span>'}</div>
     <button class="ghost" onclick="A.toggleDrawer()">📜 Chronicle</button>`;
 }
@@ -1813,7 +1819,7 @@ function renderKeep() {
   // passive income — the Keep's coffers fill over time; click to collect
   const accrued = accruedIncome(Date.now());
   html += `<div class="card"><div class="spread">
-    <div>🪙 Treasury — <b class="gold-t"><span data-income>${accrued}</span>g</b> waiting
+    <div>${coin(15)} Treasury — <b class="gold-t"><span data-income>${accrued}</span>g</b> waiting
       <span class="sub">(${incomeRate()}g/hour, holds up to ${CFG.KEEP_INCOME_CAP_H} hours)</span></div>
     <button class="act" ${accrued ? '' : 'disabled'} onclick="A.collectIncome()">Collect</button>
   </div></div>`;
