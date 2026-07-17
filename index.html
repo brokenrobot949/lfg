@@ -169,7 +169,7 @@
   <main id="view"></main>
   <footer class="note">
     LFG — your guild endures while you're away. Progress is saved automatically in this browser.
-    <div style="margin-top:14px"><button class="ghost" onclick="A.askReset()" style="border-color:var(--red); color:var(--red)">⟲ Reset all data</button></div>
+    <div style="margin-top:14px"><button class="ghost" onclick="A.openData()">💾 Backup / Restore</button> <button class="ghost" onclick="A.askReset()" style="border-color:var(--red); color:var(--red)">⟲ Reset all data</button></div>
   </footer>
 </div>
 <div id="modal-root"></div>
@@ -213,7 +213,8 @@ const CFG = {
   XP_PER_CR: 1.1,               // base per-hero XP = challenge rating * this
   FAIL_GOLD_FRAC: 0.30,         // failed missions still pay this fraction of gold
   FAIL_XP_FRAC: 0.35,           // ...and this fraction of XP
-  STORY_REWARD_MULT: 1.4,       // story missions pay a premium
+  STORY_GOLD_MULT: 1.4,         // story missions pay premium gold
+  STORY_XP_MULT: 1.0,           // ...but only standard XP — growth comes from the tavern grind
   PARTY_SIZE_REWARD_BONUS: 0.10, // extra gold & XP per hero beyond the 4-hero core
 
   // --- training (safe, slow XP) ---
@@ -234,6 +235,11 @@ const CFG = {
   ROSTER_PER_KEEP_LEVEL: 2,     // extra roster slots per Keep level above 1
   TRAIN_SLOTS_BASE: 1,
   TRAIN_SLOTS_PER_KEEP_LEVEL: 1,
+
+  // --- the Keep's passive income (accrues over time; click to collect) ---
+  KEEP_INCOME_PER_H: 10,        // gold per hour at Keep level 1
+  KEEP_INCOME_PER_LEVEL_H: 5,   // additional gold/hour per Keep level above 1
+  KEEP_INCOME_CAP_H: 4,         // accrual stops this many hours after last collection
 
   // --- the job board ---
   JOBS_PER_TIER: 6,             // postings shown per difficulty tier
@@ -285,6 +291,9 @@ const CFG = {
   RENOWN_FAIL_FRAC: 0.25,        // failures still spread your name a little
   RENOWN_FIRST_CLEAR: 25,        // bonus per campaign chapter first-clear
   RENOWN_CAMPAIGN_COMPLETE: 100, // bonus for finishing a campaign
+
+  // --- prestige / legacy (Retire the Charter → New-Game+) ---
+  LEGACY_PER_RETIREMENT: 5,      // Legacy points earned each time the charter is retired
 
   LOG_LIMIT: 80,
   AWAY_MODAL_MIN_S: 60,         // show "while you were away" if gone longer than this
@@ -461,37 +470,37 @@ const CAMPAIGNS = [
   { name: "The Rat King's Shadow", levelHint: 'Heroes level 1–5',
     desc: 'Something stirs beneath the city of Greywall. The rats grow bold, and large, and organized.',
     missions: [
-      { name: 'Cellar of the Broken Cask', cr: 45,  hours: 0.5, size: 4, flavor: 'Rats the size of hounds gnaw at the brewery stores. Their eyes are far too clever.' },
-      { name: "The Miller's Lament",       cr: 70,  hours: 1,   size: 4, flavor: 'A miller swears his flour walks off at night, sack by sack, in a hundred small hands.' },
-      { name: 'Tunnels Below Greywall',    cr: 100, hours: 1.5, size: 4, flavor: 'The sewers open into older tunnels no mason of Greywall ever cut.' },
-      { name: 'Court of Whiskers',         cr: 175, hours: 2,   size: 5, flavor: 'Robed rat-priests chant before a throne of bones. They are expecting someone.' },
-      { name: 'The Rat King',              cr: 280, hours: 3,   size: 6, flavor: 'Nine tails knotted into one crown. The Rat King rises, and Greywall holds its breath.' },
+      { name: 'Cellar of the Broken Cask', cr: 50,  hours: 0.5, size: 4, flavor: 'Rats the size of hounds gnaw at the brewery stores. Their eyes are far too clever.' },
+      { name: "The Miller's Lament",       cr: 95,  hours: 1,   size: 4, flavor: 'A miller swears his flour walks off at night, sack by sack, in a hundred small hands.' },
+      { name: 'Tunnels Below Greywall',    cr: 140, hours: 1.5, size: 4, flavor: 'The sewers open into older tunnels no mason of Greywall ever cut.' },
+      { name: 'Court of Whiskers',         cr: 215, hours: 2,   size: 5, flavor: 'Robed rat-priests chant before a throne of bones. They are expecting someone.' },
+      { name: 'The Rat King',              cr: 320, hours: 3,   size: 6, flavor: 'Nine tails knotted into one crown. The Rat King rises, and Greywall holds its breath.' },
     ]},
   { name: 'Embers of the Ashen Vale', levelHint: 'Heroes level 5–10',
     desc: 'The Vale burned a generation ago. Now the ashes are warm again, and the Flame Cult walks openly.',
     missions: [
-      { name: 'Scorched Homesteads',   cr: 220, hours: 2, size: 4, flavor: 'Farms burn in perfect circles. The survivors speak of laughing figures in the smoke.' },
-      { name: 'The Charcoal Forest',   cr: 260, hours: 3, size: 4, flavor: 'Blackened trees that still stand, still creak, and — some nights — still whisper.' },
-      { name: 'Kiln of the Flame Cult', cr: 305, hours: 4, size: 4, flavor: 'The cult feeds the great kiln day and night. What they are firing is not pottery.' },
-      { name: 'The Ember Gate',        cr: 440, hours: 5, size: 5, flavor: 'A door of cooling magma, opened once a century. It is opening early.' },
-      { name: 'Heart of Cinders',      cr: 600, hours: 6, size: 6, flavor: 'At the Vale’s center sleeps the ember that started it all. The cult means to wake it.' },
+      { name: 'Scorched Homesteads',   cr: 240, hours: 2, size: 4, flavor: 'Farms burn in perfect circles. The survivors speak of laughing figures in the smoke.' },
+      { name: 'The Charcoal Forest',   cr: 280, hours: 3, size: 4, flavor: 'Blackened trees that still stand, still creak, and — some nights — still whisper.' },
+      { name: 'Kiln of the Flame Cult', cr: 320, hours: 4, size: 4, flavor: 'The cult feeds the great kiln day and night. What they are firing is not pottery.' },
+      { name: 'The Ember Gate',        cr: 450, hours: 5, size: 5, flavor: 'A door of cooling magma, opened once a century. It is opening early.' },
+      { name: 'Heart of Cinders',      cr: 615, hours: 6, size: 6, flavor: 'At the Vale’s center sleeps the ember that started it all. The cult means to wake it.' },
     ]},
   { name: 'The Drowned Crown', levelHint: 'Heroes level 10–15',
     desc: 'The tide goes out farther every month, and what it uncovers should have stayed beneath the sea.',
     missions: [
-      { name: 'Salt-Rotted Piers',   cr: 435, hours: 4, size: 4, flavor: 'Dock workers vanish at low tide. The harbormaster pays in advance now.' },
-      { name: 'The Sunken Chapel',   cr: 475, hours: 5, size: 4, flavor: 'Bells toll beneath the waves. The congregation never stopped attending.' },
-      { name: "Leviathan's Wake",    cr: 650, hours: 6, size: 5, flavor: 'Something vast passed through the bay last night. These are the things it left behind.' },
-      { name: 'Palace of Tides',     cr: 700, hours: 7, size: 5, flavor: 'Coral halls where drowned courtiers still bow to an empty throne.' },
-      { name: 'The Drowned King',    cr: 915, hours: 8, size: 6, flavor: 'He drowned with his crown on, and he has been patient. The sea gives him back.' },
+      { name: 'Salt-Rotted Piers',   cr: 430, hours: 4, size: 4, flavor: 'Dock workers vanish at low tide. The harbormaster pays in advance now.' },
+      { name: 'The Sunken Chapel',   cr: 470, hours: 5, size: 4, flavor: 'Bells toll beneath the waves. The congregation never stopped attending.' },
+      { name: "Leviathan's Wake",    cr: 640, hours: 6, size: 5, flavor: 'Something vast passed through the bay last night. These are the things it left behind.' },
+      { name: 'Palace of Tides',     cr: 690, hours: 7, size: 5, flavor: 'Coral halls where drowned courtiers still bow to an empty throne.' },
+      { name: 'The Drowned King',    cr: 885, hours: 8, size: 6, flavor: 'He drowned with his crown on, and he has been patient. The sea gives him back.' },
     ]},
   { name: 'Winter of the Worldworm', levelHint: 'Heroes level 15–20',
     desc: 'The frost comes south out of season, mile by mile. Beneath the ice, something ancient is chewing through the roots of the world.',
     missions: [
-      { name: 'The Frostbitten March', cr: 640, hours: 6,  size: 4, flavor: 'Whole villages stand frozen mid-step, like a bell jar dropped over an afternoon.' },
-      { name: 'Howling Glacier',       cr: 680, hours: 8,  size: 4, flavor: 'The glacier moves against the wind, and the howling comes from inside it.' },
-      { name: "The Wyrm's Larder",     cr: 905, hours: 9,  size: 5, flavor: 'Caverns of blue ice, stocked with everything the Worm has swallowed for an age.' },
-      { name: 'Cathedral of Ice',      cr: 1145, hours: 10, size: 6, flavor: 'Its priests have no faces, and the hymn never resolves. Winter is a religion here.' },
+      { name: 'The Frostbitten March', cr: 620, hours: 6,  size: 4, flavor: 'Whole villages stand frozen mid-step, like a bell jar dropped over an afternoon.' },
+      { name: 'Howling Glacier',       cr: 660, hours: 8,  size: 4, flavor: 'The glacier moves against the wind, and the howling comes from inside it.' },
+      { name: "The Wyrm's Larder",     cr: 875, hours: 9,  size: 5, flavor: 'Caverns of blue ice, stocked with everything the Worm has swallowed for an age.' },
+      { name: 'Cathedral of Ice',      cr: 1110, hours: 10, size: 6, flavor: 'Its priests have no faces, and the hymn never resolves. Winter is a religion here.' },
       { name: 'The Worldworm',         cr: 1215, hours: 12, size: 6, flavor: 'It has eaten the roots of mountains. Your guild’s name will be remembered — either way.' },
     ]},
 ];
@@ -517,7 +526,7 @@ const RELICS = {
   charm:      { name: 'Copper Charm',       icon: '🧿', tier: 'common', injuryReduce: 0.90, flavor: 'A cheap trinket that turns aside the worst of luck.' },
   rations:    { name: 'Trail Rations',      icon: '🥖', tier: 'common', xp: 0.12,        flavor: 'Well-fed heroes learn a little faster. Somehow.' },
   // --- Magic: better stats, plus the first consumable ward ---
-  silversword:{ name: 'Silvered Sword',     icon: '⚔️', tier: 'magic', rating: 13,       flavor: 'Forged to bite things that flinch from ordinary steel.' },
+  silversword:{ name: 'Silver Sword',        icon: '⚔️', tier: 'magic', rating: 13,       flavor: 'Forged to bite things that flinch from ordinary steel.' },
   woodshield: { name: 'Wooden Shield',      icon: '🛡️', tier: 'magic', ward: 1,          flavor: 'Blocks one blow that would wound the bearer — then splinters apart.' },
   boots:      { name: "Traveler's Boots",   icon: '👢', tier: 'magic', duration: 0.88,   flavor: 'The miles go easier, and the missions go quicker.' },
   tome:       { name: "Apprentice's Tome",  icon: '📖', tier: 'magic', xp: 0.22,         flavor: 'Bedtime reading between the swordfights.' },
@@ -639,6 +648,19 @@ const GUILD_RANKS = [
   { name: 'Mythic', at: 9000 },
 ];
 
+// --- Legacy perks, bought with Legacy points earned by retiring the charter ---
+// Each perk has ordered tiers; buying advances to the next. state.legacy.perks maps
+// perkKey → owned tier count (1-based). value = the owned tier's magnitude.
+const LEGACY_PERKS = {
+  veteran_blood: { icon: '🩸', name: 'Veteran Blood',        tiers: [ { cost: 1, value: 2 }, { cost: 2, value: 3 } ], desc: v => `New heroes (starters and recruits) are at least level ${v}.` },
+  deep_coffers:  { icon: '💰', name: 'Deep Coffers',         tiers: [ { cost: 1, value: 150 }, { cost: 2, value: 400 } ], desc: v => `Each new charter starts with +${v} gold.` },
+  ledger:        { icon: '📒', name: "Guildmaster's Ledger", tiers: [ { cost: 2, value: 0.05 }, { cost: 3, value: 0.10 } ], desc: v => `+${Math.round(v*100)}% gold from all missions.` },
+  drillmaster:   { icon: '🏋️', name: 'Drillmaster',          tiers: [ { cost: 1, value: 0.10 }, { cost: 2, value: 0.20 } ], desc: v => `Training earns +${Math.round(v*100)}% XP.` },
+  field_medicine:{ icon: '🩹', name: 'Field Medicine',       tiers: [ { cost: 1, value: 0.10 }, { cost: 2, value: 0.20 } ], desc: v => `Injuries heal ${Math.round(v*100)}% faster.` },
+  quartermaster: { icon: '🎁', name: 'Quartermaster',        tiers: [ { cost: 2, value: 'magic' }, { cost: 3, value: 'rare' } ], desc: v => `Each new charter starts with a random ${RELIC_TIERS[v].name} relic.` },
+  herald:        { icon: '📯', name: 'Renown Herald',        tiers: [ { cost: 1, value: 0.25 } ], desc: v => `+${Math.round(v*100)}% renown from missions.` },
+};
+
 /* =====================================================================
  *  STATE
  * ===================================================================== */
@@ -650,6 +672,7 @@ function defaultState(now) {
     guildName: '',        // set during the founding modal
     tabard: null,          // {pattern,c1,c2,emblem} — set via the Keep's tabard editor
     renown: 0,             // permanent guild fame — never decreases, never spent; gates rank/cosmetics
+    legacy: { points: 0, ascensions: 0, perks: {} }, // prestige: carries across retirements
     gold: CFG.STARTING_GOLD,
     heroes: [],
     activeMissions: [],   // {id,name,cr,start,end,heroIds,story:{c,i}|null}
@@ -661,7 +684,9 @@ function defaultState(now) {
     relics: [],           // {id,key,tier,equippedBy:heroId|null,charges}
     shop: { relics: [], expires: 0 }, // the Reliquary — {key,price}[] + rotation time
     keepLevel: 1,
+    lastCollect: now,     // when the Keep's passive income was last collected
     campaigns: [0, 0, 0, 0], // missions completed per campaign
+    briefings: [],        // queued mission-result reports (persisted so offline results survive boot)
     log: [],
     nextId: 1,
     lastSeen: now,
@@ -702,7 +727,7 @@ function completedCampaignCount() {
 
 function genRecruit() {
   const maxLvl = Math.min(CFG.LEVEL_CAP, 1 + CFG.RECRUIT_LEVELS_PER_CAMPAIGN * completedCampaignCount());
-  const level = rndInt(1, maxLvl);
+  const level = Math.max(rndInt(1, maxLvl), heroFloorLevel());
   const h = newHero(choice(CLASS_NAMES), level);
   h.cost = CFG.RECRUIT_COST_BASE + level * CFG.RECRUIT_COST_PER_LEVEL + h.talent * CFG.RECRUIT_COST_PER_TALENT;
   return h;
@@ -859,19 +884,65 @@ function autoRefreshShop(now) {
   return true;
 }
 
-function initNewGame(now) {
+// small roman numeral for charter numbering (1..20, plenty for ascensions)
+function roman(n) {
+  const map = [[10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']];
+  let out = '', x = Math.max(1, Math.floor(n));
+  for (const [v, s] of map) while (x >= v) { out += s; x -= v; }
+  return out;
+}
+
+// Start a fresh charter. `carry` (optional) = { guildName, tabard, renown, legacy }
+// preserved across a retirement; a genuinely new game passes nothing.
+function initNewGame(now, carry) {
   state = defaultState(now);
-  // starter party: one tank, one healer, two DPS at level 1
-  state.heroes.push(newHero(choice(classesOfRole('tank')), CFG.STARTER_LEVEL));
-  state.heroes.push(newHero(choice(classesOfRole('healer')), CFG.STARTER_LEVEL));
-  state.heroes.push(newHero(choice(classesOfRole('dps')), CFG.STARTER_LEVEL));
-  state.heroes.push(newHero(choice(classesOfRole('dps')), CFG.STARTER_LEVEL));
+  if (carry) { state.guildName = carry.guildName; state.tabard = carry.tabard; state.renown = carry.renown; state.legacy = carry.legacy; }
+  // starter party: one tank, one healer, two DPS at the guild's hero floor level
+  const lvl = heroFloorLevel();
+  state.heroes.push(newHero(choice(classesOfRole('tank')), lvl));
+  state.heroes.push(newHero(choice(classesOfRole('healer')), lvl));
+  state.heroes.push(newHero(choice(classesOfRole('dps')), lvl));
+  state.heroes.push(newHero(choice(classesOfRole('dps')), lvl));
+  state.gold = CFG.STARTING_GOLD + (legacyValue('deep_coffers') || 0);
   refreshRecruitPool();
   state.relics.push(makeRelic('dagger')); // a first relic to introduce the system
+  const qm = legacyValue('quartermaster');
+  if (qm) state.relics.push(randomRelic(qm)); // Quartermaster: a bonus starter relic
   refreshShop(now);
-  log('The guild charter is signed. Four hopefuls answer the call. LFG.');
-  log('🗡️ A guild patron gifts you an Iron Dagger — equip it on the Inventory tab.');
+  if (carry) {
+    log(`⚜ Charter ${roman(state.legacy.ascensions + 1)} — ${state.guildName} is founded anew. The legend continues.`);
+  } else {
+    log('The guild charter is signed. Four hopefuls answer the call. LFG.');
+    log('🗡️ A guild patron gifts you an Iron Dagger — equip it on the Inventory tab.');
+  }
   refreshJobBoard(now);
+  save();
+}
+
+// Prestige: retire a completed charter and found a new one, carrying identity,
+// renown, and legacy (+ a fresh Legacy point) into the next generation.
+function retireCharter() {
+  if (!charterEligible() || state.activeMissions.length > 0) return;
+  const carry = {
+    guildName: state.guildName,
+    tabard: state.tabard,
+    renown: state.renown,
+    legacy: {
+      points: state.legacy.points + CFG.LEGACY_PER_RETIREMENT,
+      ascensions: state.legacy.ascensions + 1,
+      perks: Object.assign({}, state.legacy.perks),
+    },
+  };
+  initNewGame(Date.now(), carry);
+  log(`🏆 +${CFG.LEGACY_PER_RETIREMENT} Legacy earned. Spend it at the Keep.`);
+  // clear transient UI so the new charter opens cleanly on the Keep
+  // (state.briefings is already reset by defaultState via initNewGame)
+  ui.awayMsgs = null;
+  ui.picker = null; ui.picked = [];
+  ui.heroPicker = null;
+  ui.legacyShop = false;
+  ui.confirmRetire = false;
+  ui.view = 'keep';
   save();
 }
 
@@ -906,6 +977,10 @@ const highestHeroLevel = () => livingHeroes().reduce((m, h) => Math.max(m, h.lev
 // a job tier is visible once the guild's best hero clears its minimum level
 const jobTierUnlocked = tier => highestHeroLevel() >= (CFG.JOB_TIER_MIN_LEVEL[tier] || 1);
 
+// --- the Keep's passive income (accrues from state.lastCollect, capped) ---
+const incomeRate = () => CFG.KEEP_INCOME_PER_H + (state.keepLevel - 1) * CFG.KEEP_INCOME_PER_LEVEL_H;
+const accruedIncome = now => Math.floor(incomeRate() * Math.min(now - state.lastCollect, CFG.KEEP_INCOME_CAP_H * H) / H);
+
 // --- renown & guild rank ---
 // index of the highest GUILD_RANKS entry the guild's current renown has reached
 function rankIdx() {
@@ -930,6 +1005,22 @@ function retroactiveRenown() {
   });
   return r;
 }
+
+// --- legacy / prestige perks ---
+// owned tier count for a perk (0 = not owned)
+const legacyTier = key => state.legacy.perks[key] || 0;
+// the magnitude of the owned tier, or null if unowned
+function legacyValue(key) {
+  const tier = legacyTier(key);
+  if (!tier) return null;
+  return LEGACY_PERKS[key].tiers[tier - 1].value;
+}
+// minimum level any new hero starts at (Veteran Blood floors it)
+const heroFloorLevel = () => Math.max(CFG.STARTER_LEVEL, legacyValue('veteran_blood') || 0);
+// training XP per hour, boosted by Drillmaster
+const trainingRate = () => CFG.TRAINING_XP_PER_HOUR * (1 + (legacyValue('drillmaster') || 0));
+// the charter can be retired once the final campaign is complete
+const charterEligible = () => state.campaigns[3] === 5;
 
 const xpToNext = lvl => CFG.XP_PER_LEVEL_STEP * lvl;
 const heroRating = h => h.level * CFG.RATING_PER_LEVEL + h.talent;
@@ -984,15 +1075,16 @@ function partySizeBonus(heroes) {
 }
 
 function missionGoldReward(cr, story, heroes, success) {
-  let g = cr * CFG.GOLD_PER_CR * (story ? CFG.STORY_REWARD_MULT : 1);
+  let g = cr * CFG.GOLD_PER_CR * (story ? CFG.STORY_GOLD_MULT : 1);
   g *= 1 + (powerAgg(heroes).goldPct + relicAgg(heroes).gold);
+  g *= 1 + (legacyValue('ledger') || 0); // Guildmaster's Ledger: legacy gold bonus
   g *= partySizeBonus(heroes);
   if (!success) g *= failFraction(CFG.FAIL_GOLD_FRAC, heroes);
   return Math.round(g);
 }
 
 function missionXpReward(cr, story, heroes, hero, success) {
-  let x = cr * CFG.XP_PER_CR * (story ? CFG.STORY_REWARD_MULT : 1);
+  let x = cr * CFG.XP_PER_CR * (story ? CFG.STORY_XP_MULT : 1);
   x *= 1 + powerAgg(heroes).partyXpPct + relicAgg(heroes).partyXp;
   x *= partySizeBonus(heroes);
   const hp = heroPower(hero); if (hp && hp.selfXpMult != null) x *= hp.selfXpMult;
@@ -1049,8 +1141,9 @@ function resolveMission(m, endTime) {
   // renown: permanent guild fame, cosmetic-only (gates rank/tabard unlocks)
   let ren = Math.round(cr * CFG.RENOWN_PER_CR * (story ? CFG.RENOWN_STORY_MULT : 1));
   if (!success) ren = Math.round(ren * CFG.RENOWN_FAIL_FRAC);
+  ren = Math.round(ren * (1 + (legacyValue('herald') || 0))); // Renown Herald: legacy renown bonus
 
-  const recoveryMs = CFG.INJURY_DURATION_H * H * powerAgg(heroes).recoveryMult;
+  const recoveryMs = CFG.INJURY_DURATION_H * H * powerAgg(heroes).recoveryMult * (1 - (legacyValue('field_medicine') || 0));
 
   // Aegis: any wardParty relic shields the whole party from injury this mission,
   // then is consumed regardless of whether anyone would have been hurt.
@@ -1141,7 +1234,7 @@ function resolveMission(m, endTime) {
   drops.forEach(d => log(`🎁 Relic acquired: ${RELICS[d.key].icon} ${RELICS[d.key].name} (${RELIC_TIERS[d.tier].name}).`));
 
   // queue a briefing for the player to read when they next look at the screen
-  ui.briefings.push({
+  state.briefings.push({
     name: m.name, story, success, gold, xpEach: per,
     partySize: heroes.length,
     recoveryTxt: fmtDur(recoveryMs),
@@ -1175,7 +1268,7 @@ function assignTraining(heroId) {
 
 function trainingXpSoFar(t, now) {
   const elapsed = Math.min(now, t.end) - t.start;
-  return Math.floor((elapsed / H) * CFG.TRAINING_XP_PER_HOUR);
+  return Math.floor((elapsed / H) * trainingRate());
 }
 
 function finishTraining(t, endTime) {
@@ -1322,6 +1415,9 @@ function applyImport(text) {
   if (!state.shop || !Array.isArray(state.shop.relics)) state.shop = { relics: [], expires: 0 };
   if (state.tabard === undefined) state.tabard = null;
   if (typeof state.renown !== 'number') state.renown = retroactiveRenown();
+  if (!state.legacy || typeof state.legacy !== 'object' || !state.legacy.perks) state.legacy = { points: 0, ascensions: 0, perks: {} };
+  if (typeof state.lastCollect !== 'number') state.lastCollect = Date.now();
+  if (!Array.isArray(state.briefings)) state.briefings = [];
   if (!state.nextId) state.nextId = Math.max(0, ...state.heroes.map(h => h.id || 0)) + 1;
   state.heroes.forEach(ensureHeroPower);
   (state.recruits || []).forEach(ensureHeroPower);
@@ -1331,7 +1427,6 @@ function applyImport(text) {
   autoRefreshShop(now);
   if (!state.shop.relics.length) refreshShop(now);
   refreshJobBoard(now);
-  ui.briefings = [];                 // this is a deliberate load, not a return-from-away
   if (!state.guildName) ui.naming = 'found';
   save();
   log('📥 Save data imported.');
@@ -1422,7 +1517,7 @@ const ui = {
   heroPicker: null,   // 'train' | 'rest'
   drawer: false,
   awayMsgs: null,
-  briefings: [],      // queued mission-result briefings to show one at a time
+  rosterTab: 'all',   // 'all' | 'tank' | 'healer' | 'dps' — Roster role filter
   naming: null,       // 'found' | 'rename' — guild name modal
   confirmDismiss: null, // heroId awaiting dismissal confirmation
   dataModal: false,   // backup & restore panel
@@ -1431,6 +1526,8 @@ const ui = {
   confirmReset: false, // reset-all-data confirmation
   invTab: 'open',     // 'open' | 'equipped' — Inventory sub-tab
   tabardEditor: null, // working copy {pattern,c1,c2,emblem} while designing the guild tabard
+  legacyShop: false,  // Legacy perks modal
+  confirmRetire: false, // retire-the-charter confirmation
 };
 
 const $ = id => document.getElementById(id);
@@ -1660,6 +1757,24 @@ function renownCardHtml() {
   return html;
 }
 
+// legacy / prestige card — shown on the Keep, directly under the renown card
+function legacyCardHtml() {
+  const lg = state.legacy;
+  let html = `<div class="card">
+    <div class="spread">
+      <div>⚜ Charter <b>${roman(lg.ascensions + 1)}</b> · Legacy points: <b class="gold-t">${lg.points}</b></div>
+      <div class="row">
+        <button class="ghost" onclick="A.openLegacy()">⚜ Legacy perks</button>
+        ${charterEligible() ? '<button class="act" onclick="A.askRetire()">🏆 Retire the Charter</button>' : ''}
+      </div>
+    </div>`;
+  if (lg.ascensions === 0 && !charterEligible()) {
+    html += '<div class="sub">Fell the Worldworm to retire the charter and earn Legacy.</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
 /* ---------- Keep ---------- */
 function renderKeep() {
   const lvl = state.keepLevel;
@@ -1674,7 +1789,6 @@ function renderKeep() {
       <div class="row">
         <button class="ghost" onclick="A.openTabard()">🎨 ${state.tabard ? 'Edit' : 'Design'} tabard</button>
         <button class="ghost" onclick="A.openRename()">✍ Rename guild — ${CFG.GUILD_RENAME_COST}g</button>
-        <button class="ghost" onclick="A.openData()">💾 Backup / Restore</button>
       </div>
     </div>
     <hr class="thin">
@@ -1692,11 +1806,22 @@ function renderKeep() {
     </div>
   </div>`;
 
+  // passive income — the Keep's coffers fill over time; click to collect
+  const accrued = accruedIncome(Date.now());
+  html += `<div class="card"><div class="spread">
+    <div>🪙 Treasury — <b class="gold-t"><span data-income>${accrued}</span>g</b> waiting
+      <span class="sub">(${incomeRate()}g/hour, holds up to ${CFG.KEEP_INCOME_CAP_H} hours)</span></div>
+    <button class="act" ${accrued ? '' : 'disabled'} onclick="A.collectIncome()">Collect</button>
+  </div></div>`;
+
   // renown & guild rank
   html += renownCardHtml();
 
+  // legacy / prestige
+  html += legacyCardHtml();
+
   // training
-  html += `<h3>🎓 Training Yard <span class="sub">(${CFG.TRAINING_XP_PER_HOUR} XP/hour, sessions end after ${CFG.TRAINING_CAP_H}h — the safe, slow path)</span></h3>`;
+  html += `<h3>🎓 Training Yard <span class="sub">(${Math.round(trainingRate())} XP/hour, sessions end after ${CFG.TRAINING_CAP_H}h — the safe, slow path)</span></h3>`;
   const now = Date.now();
   state.training.forEach(t => {
     const h = heroById(t.heroId);
@@ -1782,8 +1907,8 @@ function renderTavern() {
 function missionRow(def, story, statusHtml) {
   const size = def.size || 4;
   const sizeMult = 1 + Math.max(0, size - 4) * CFG.PARTY_SIZE_REWARD_BONUS;
-  const baseGold = Math.round(def.cr * CFG.GOLD_PER_CR * (story ? CFG.STORY_REWARD_MULT : 1) * sizeMult);
-  const baseXp = Math.round(def.cr * CFG.XP_PER_CR * (story ? CFG.STORY_REWARD_MULT : 1) * sizeMult);
+  const baseGold = Math.round(def.cr * CFG.GOLD_PER_CR * (story ? CFG.STORY_GOLD_MULT : 1) * sizeMult);
+  const baseXp = Math.round(def.cr * CFG.XP_PER_CR * (story ? CFG.STORY_XP_MULT : 1) * sizeMult);
   const idle = idleHeroes();
   const canStaff = idle.filter(h => CLASSES[h.cls].role === 'tank').length >= 1 &&
                    idle.filter(h => CLASSES[h.cls].role === 'healer').length >= 1 &&
@@ -1795,7 +1920,7 @@ function missionRow(def, story, statusHtml) {
       <div>
         <b>${esc(def.name)}</b>
         <span class="sub"> · CR ${def.cr} · ${fmtHours(def.hours)} · ${sizeTxt} · ~${baseGold}g, ~${baseXp} XP each</span>
-        <div class="flavor">${esc(def.flavor)}</div>
+        ${def.flavor ? `<div class="flavor">${esc(def.flavor)}</div>` : ''}
         ${def.expires ? `<div class="sub">Leaves the board in <span class="cd" data-cd="${def.expires}"></span></div>` : ''}
       </div>
       <div class="m-side" style="text-align:right; min-width:130px">
@@ -1828,10 +1953,19 @@ function renderCampaigns() {
       else if (inProgress) statusHtml = '<span class="blue">Party in the field…</span>';
       else if (i > done) statusHtml = '<span class="sub">🔒 Locked</span>';
       if (i === done && !inProgress) statusHtml = undefined; // renders Send party button
-      html += missionRow(mdef, { c, i }, statusHtml);
+      // hide the name & flavor of not-yet-unlocked chapters — no spoilers, but keep the
+      // planning stats (CR / duration / party size / reward estimates) visible
+      const rowDef = i > done ? { ...mdef, name: `Chapter ${i + 1}: ???`, flavor: '' } : mdef;
+      html += missionRow(rowDef, { c, i }, statusHtml);
     });
     html += '<div style="height:14px"></div>';
   });
+  if (charterEligible()) {
+    html += `<div class="card legendary-glow" style="background:var(--panel2)">
+      <div class="spread"><b style="color:var(--gold)">⚜ Retire the Charter</b>
+      <button class="act" onclick="A.askRetire()">🏆 Retire the Charter</button></div>
+      <div class="flavor">The Worldworm is slain. Nothing remains but legend — and the next generation.</div></div>`;
+  }
   return html;
 }
 
@@ -1839,11 +1973,22 @@ function renderCampaigns() {
 function renderRoster() {
   const living = livingHeroes();
   const dead = state.heroes.filter(h => h.status === 'dead');
-  let html = `<h2>🗡 Roster <span class="sub">${living.length}/${rosterCap()} heroes</span></h2><div class="grid">`;
+  const roleCount = role => living.filter(h => CLASSES[h.cls].role === role).length;
+  let html = `<h2>🗡 Roster <span class="sub">${living.length}/${rosterCap()} heroes</span></h2>`;
+  const tabs = [['all', `All (${living.length})`], ['tank', `🛡 Tanks (${roleCount('tank')})`],
+                ['healer', `✚ Healers (${roleCount('healer')})`], ['dps', `⚔ DPS (${roleCount('dps')})`]];
+  html += `<div class="row" style="margin-bottom:10px">` + tabs.map(([k, label]) =>
+    `<button class="subtab ${ui.rosterTab === k ? 'active' : ''}" onclick="A.setRosterTab('${k}')">${label}</button>`).join('') + `</div>`;
   const order = { idle: 0, injured: 1, mission: 2, training: 3, resting: 4 };
-  living.slice().sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9) || b.level - a.level)
-    .forEach(h => { html += heroCard(h, heroActions(h)); });
-  html += '</div>';
+  const shown = living.filter(h => ui.rosterTab === 'all' || CLASSES[h.cls].role === ui.rosterTab);
+  if (!shown.length) {
+    html += '<div class="empty">No heroes of this role. Recruit some at the Tavern.</div>';
+  } else {
+    html += '<div class="grid">';
+    shown.slice().sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9) || b.level - a.level)
+      .forEach(h => { html += heroCard(h, heroActions(h)); });
+    html += '</div>';
+  }
   if (dead.length) {
     html += '<h3 class="red">☠ Hall of the Fallen</h3><div class="grid">';
     dead.forEach(h => {
@@ -1922,9 +2067,11 @@ function renderModal() {
   const root = $('modal-root');
   if (ui.naming) { root.innerHTML = guildModal(); focusGuildInput(); return; }
   if (ui.awayMsgs) { root.innerHTML = awayModal(); return; }
-  if (ui.briefings.length) { root.innerHTML = briefingModal(); return; }
+  if (state.briefings.length) { root.innerHTML = briefingModal(); return; }
   if (ui.dataModal) { root.innerHTML = dataModal(); return; }
   if (ui.tabardEditor) { root.innerHTML = tabardEditorModal(); return; }
+  if (ui.legacyShop) { root.innerHTML = legacyShopModal(); return; }
+  if (ui.confirmRetire) { root.innerHTML = retireModal(); return; }
   if (ui.confirmReset) { root.innerHTML = resetModal(); return; }
   if (ui.confirmDismiss != null) { root.innerHTML = dismissModal(); return; }
   if (ui.equipRelic != null) { root.innerHTML = equipRelicModal(); return; }
@@ -1964,8 +2111,8 @@ function guildModal() {
 }
 
 function briefingModal() {
-  const b = ui.briefings[0];
-  const more = ui.briefings.length - 1;
+  const b = state.briefings[0];
+  const more = state.briefings.length - 1;
   const banner = b.success
     ? '<div style="font-size:22px" class="green">✅ Mission Successful</div>'
     : '<div style="font-size:22px" class="red">❌ Mission Failed</div>';
@@ -2107,6 +2254,55 @@ function equipHeroModal() {
   </div></div>`;
 }
 
+// Keep → spend Legacy points on permanent prestige perks.
+function legacyShopModal() {
+  const pts = state.legacy.points;
+  let rows = '';
+  Object.keys(LEGACY_PERKS).forEach(key => {
+    const p = LEGACY_PERKS[key];
+    const owned = legacyTier(key);
+    const maxed = owned >= p.tiers.length;
+    const shownVal = owned > 0 ? p.tiers[owned - 1].value : p.tiers[0].value;
+    const nextCost = maxed ? null : p.tiers[owned].cost;
+    const btn = maxed
+      ? '<button class="act" disabled>Maxed</button>'
+      : `<button class="act" ${pts < nextCost ? 'disabled' : ''} onclick="A.buyPerk('${key}')">Buy tier ${owned + 1} — ${nextCost} pt${nextCost > 1 ? 's' : ''}</button>`;
+    rows += `<div class="card">
+      <div class="spread">
+        <div><b>${p.icon} ${esc(p.name)}</b> <span class="sub">Tier ${owned}/${p.tiers.length}</span></div>
+        ${btn}
+      </div>
+      <div class="ability">${esc(p.desc(shownVal))}</div>
+    </div>`;
+  });
+  return `<div id="modal-wrap" onclick="if(event.target.id==='modal-wrap')A.closeLegacy()"><div class="modal">
+    <h2>⚜ Legacy Perks</h2>
+    <div class="sub" style="margin-bottom:10px">Permanent guild advantages, carried across every retirement. Legacy points available: <b class="gold-t">${pts}</b>.</div>
+    ${rows}
+    <div style="text-align:right; margin-top:10px"><button class="ghost" onclick="A.closeLegacy()">Close</button></div>
+  </div></div>`;
+}
+
+// Campaigns/Keep → confirm retiring a completed charter into a new one.
+function retireModal() {
+  const busy = state.activeMissions.length > 0;
+  return `<div id="modal-wrap" onclick="if(event.target.id==='modal-wrap')A.cancelRetire()"><div class="modal">
+    <h2 class="gold-t">🏆 Retire the Charter?</h2>
+    <div class="sub" style="margin-bottom:10px">Retire <b>${state.guildName ? esc(state.guildName) : 'your guild'}</b> to found a new charter — stronger for everything that came before.</div>
+    <div class="preview">
+      <div><b class="green">Carries over:</b> guild name, tabard, renown &amp; rank (with every cosmetic you've unlocked), and all Legacy points &amp; perks.</div>
+      <div style="margin-top:6px"><b class="red">Resets:</b> all heroes, every relic, gold, Keep level, campaign progress, and the job board.</div>
+      <div class="gold-t" style="margin-top:6px">🏆 +${CFG.LEGACY_PER_RETIREMENT} Legacy points to spend on perks.</div>
+    </div>
+    <div class="spread" style="margin-top:12px">
+      <button class="ghost" onclick="A.cancelRetire()">Cancel</button>
+      ${busy
+        ? '<span class="sub red">Parties are still in the field — wait for them to return first.</span>'
+        : '<button class="act" style="background:var(--red)" onclick="A.confirmRetire()">Retire and found anew</button>'}
+    </div>
+  </div></div>`;
+}
+
 function resetModal() {
   return `<div id="modal-wrap" onclick="if(event.target.id==='modal-wrap')A.cancelReset()"><div class="modal">
     <h2 class="red">⟲ Reset all data?</h2>
@@ -2209,7 +2405,7 @@ function pickerModal() {
     ${preview}
     <div class="spread" style="margin-top:12px">
       <button class="ghost" onclick="A.closePicker()">Cancel</button>
-      <button class="act" ${ready ? '' : 'disabled'} onclick="A.confirmParty()">⚔ Send them out</button>
+      <button class="act" ${ready ? '' : 'disabled'} onclick="A.confirmParty()">⚔ Venture forth!</button>
     </div>
   </div></div>`;
 }
@@ -2219,7 +2415,7 @@ function heroPickerModal() {
   const pool = purpose === 'train' ? idleHeroes() : idleHeroes().filter(h => h.marks > 0);
   const title = purpose === 'train' ? '🎓 Assign to training' : '🛌 Send to rest';
   const note = purpose === 'train'
-    ? `${CFG.TRAINING_XP_PER_HOUR} XP/hour for up to ${CFG.TRAINING_CAP_H} hours.`
+    ? `${Math.round(trainingRate())} XP/hour for up to ${CFG.TRAINING_CAP_H} hours.`
     : `${CFG.REST_DURATION_H} hours; removes one injury mark.`;
   return `<div id="modal-wrap" onclick="if(event.target.id==='modal-wrap')A.closeHeroPicker()"><div class="modal">
     <h2>${title}</h2><div class="sub" style="margin-bottom:10px">${note}</div>
@@ -2269,7 +2465,7 @@ const A = {
   },
 
   // --- mission briefings ---
-  nextBriefing() { ui.briefings.shift(); render(); },
+  nextBriefing() { state.briefings.shift(); save(); render(); },
 
   // --- dismiss a hero ---
   askDismiss(id) { ui.confirmDismiss = id; renderModal(); },
@@ -2394,6 +2590,15 @@ const A = {
   assignTraining(id) { assignTraining(id); render(); },
   assignRest(id) { assignRest(id); render(); },
   recallTraining, cancelRest, healMark, recruitHero, payRefreshRecruits, upgradeKeep,
+  setRosterTab(t) { ui.rosterTab = t; render(); },
+  collectIncome() {
+    const amt = accruedIncome(Date.now());
+    if (!amt) return;
+    state.gold += amt;
+    state.lastCollect = Date.now();
+    log(`🪙 Collected ${amt} gold from the Keep's coffers.`);
+    save(); render();
+  },
 
   // --- guild tabard ---
   openTabard() {
@@ -2415,6 +2620,26 @@ const A = {
     save();
     render();
   },
+
+  // --- legacy / prestige ---
+  openLegacy() { ui.legacyShop = true; renderModal(); },
+  closeLegacy() { ui.legacyShop = false; renderModal(); },
+  buyPerk(key) {
+    const p = LEGACY_PERKS[key];
+    if (!p) return;
+    const owned = legacyTier(key);
+    if (owned >= p.tiers.length) return;           // already maxed
+    const cost = p.tiers[owned].cost;
+    if (state.legacy.points < cost) return;        // can't afford
+    state.legacy.points -= cost;
+    state.legacy.perks[key] = owned + 1;
+    log(`⚜ Legacy perk acquired: ${p.icon} ${p.name} (tier ${owned + 1}).`);
+    save();
+    renderModal();
+  },
+  askRetire() { ui.confirmRetire = true; renderModal(); },
+  cancelRetire() { ui.confirmRetire = false; renderModal(); },
+  confirmRetire() { retireCharter(); render(); },
 };
 window.A = A;
 
@@ -2428,6 +2653,7 @@ function tick() {
   document.querySelectorAll('[data-cd]').forEach(el => {
     el.textContent = fmtDur(Number(el.dataset.cd) - now);
   });
+  document.querySelectorAll('[data-income]').forEach(el => { el.textContent = accruedIncome(now); });
   // don't re-render (and wipe an open text field) while a modal with inputs is up
   const blockRender = !!ui.naming || ui.dataModal;
   let dirty = false;
@@ -2452,7 +2678,9 @@ function tick() {
     if (!state.shop || !Array.isArray(state.shop.relics)) state.shop = { relics: [], expires: 0 };
     if (state.tabard === undefined) state.tabard = null;
     if (typeof state.renown !== 'number') state.renown = retroactiveRenown();
-    if (!Array.isArray(ui.briefings)) ui.briefings = [];
+    if (!state.legacy || typeof state.legacy !== 'object' || !state.legacy.perks) state.legacy = { points: 0, ascensions: 0, perks: {} };
+    if (typeof state.lastCollect !== 'number') state.lastCollect = Date.now();
+    if (!Array.isArray(state.briefings)) state.briefings = [];
     state.heroes.forEach(ensureHeroPower);           // heroes from before powers existed
     (state.recruits || []).forEach(ensureHeroPower);
     const away = now - (state.lastSeen || now);
@@ -2461,7 +2689,7 @@ function tick() {
     if (processed > 0 && away > CFG.AWAY_MODAL_MIN_S * 1000) {
       ui.awayMsgs = state.log.slice(logBefore).map(l => l.msg);
     }
-    ui.briefings = []; // offline mission results are summarized in the away recap
+    // offline-resolved briefings persist in state.briefings and show after the away modal
     if (!state.recruits.length) refreshRecruitPool();
     autoRefreshRecruits(now);   // reshuffle the hire board if its timer lapsed while away
     autoRefreshShop(now);       // restock the Reliquary if its timer lapsed while away
@@ -2477,7 +2705,7 @@ function tick() {
   setInterval(tick, 1000);
   window.addEventListener('beforeunload', save);
   // debug handle (harmless in normal play)
-  window.LFG = { get state() { return state; }, get ui() { return ui; }, save, processEvents, render, refreshJobBoard, autoRefreshRecruits, refreshShop, makeRelic, startMission, RELICS, CFG, rankIdx, guildRank };
+  window.LFG = { get state() { return state; }, get ui() { return ui; }, save, processEvents, render, refreshJobBoard, autoRefreshRecruits, refreshShop, makeRelic, startMission, RELICS, CFG, rankIdx, guildRank, retireCharter, legacyTier, legacyValue, charterEligible };
 })();
 </script>
 </body>
