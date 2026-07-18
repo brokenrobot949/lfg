@@ -1243,7 +1243,7 @@ function resolveMission(m, endTime) {
     partySize: heroes.length,
     recoveryTxt: fmtDur(recoveryMs),
     injured: hurt.slice(), fallen: fallen.slice(), leveled,
-    relicEvents, relicDrops: drops.map(d => ({ name: RELICS[d.key].name, icon: RELICS[d.key].icon, tier: d.tier })),
+    relicEvents, relicDrops: drops.map(d => ({ key: d.key, name: RELICS[d.key].name, icon: RELICS[d.key].icon, tier: d.tier })),
     campaignComplete, campaignNext,
     renown: ren, rankUp: rankedUp,
   });
@@ -1521,10 +1521,42 @@ function coin(size = 15) {
 const ICON_ART = {
   renown: '<path d="M12 2.5 l2.7 6 6.5 .5 -5 4.3 1.6 6.4 -5.8 -3.4 -5.8 3.4 1.6 -6.4 -5 -4.3 6.5 -.5 Z" fill="#d4a72c" stroke="#a37d1a" stroke-width="1" stroke-linejoin="round"/>',
   fallen: '<path d="M12 3 C7.6 3 4.5 6 4.5 10.2 C4.5 12.6 5.6 14.2 7 15.2 V17.5 A1.5 1.5 0 0 0 8.5 19 H15.5 A1.5 1.5 0 0 0 17 17.5 V15.2 C18.4 14.2 19.5 12.6 19.5 10.2 C19.5 6 16.4 3 12 3 Z" fill="#e8dcc2" stroke="#9d9078" stroke-width="1" stroke-linejoin="round"/><circle cx="9" cy="11" r="2" fill="#221d15"/><circle cx="15" cy="11" r="2" fill="#221d15"/><path d="M12 13 l-1.1 2.2 h2.2 Z" fill="#221d15"/><path d="M9.5 19 V21 M12 19 V21.4 M14.5 19 V21" stroke="#9d9078" stroke-width="1"/>',
+  gold: '<circle cx="12" cy="12" r="10" fill="#d4a72c" stroke="#a37d1a" stroke-width="2"/><circle cx="12" cy="12" r="5.5" fill="none" stroke="#a37d1a" stroke-width="1.5" opacity=".55"/>',
+  castle: '<rect x="5" y="10" width="14" height="11" fill="#9d9078" stroke="#5c4826" stroke-width="1"/><path d="M5 10 V7 H7 V9 H9 V7 H11 V9 H13 V7 H15 V9 H17 V7 H19 V10 Z" fill="#9d9078" stroke="#5c4826" stroke-width="1" stroke-linejoin="round"/><path d="M10 21 v-4 a2 2 0 0 1 4 0 v4 Z" fill="#3d3524"/><rect x="7" y="12.5" width="2" height="2.5" fill="#3d3524"/><rect x="15" y="12.5" width="2" height="2.5" fill="#3d3524"/>',
+  tankard: '<rect x="6" y="8.5" width="9" height="12" rx="1.2" fill="#c9962e" stroke="#8a6d1d" stroke-width="1"/><path d="M15 11 h2.5 a2.4 2.4 0 0 1 0 6 H15" fill="none" stroke="#8a6d1d" stroke-width="2"/><path d="M8 11 V18 M10.5 11 V18" stroke="#a3781f" stroke-width="1" opacity=".5"/><path d="M6 9 q1.5 -2.4 3 0 q1.5 -2.4 3 0 q1.5 -2.4 3 0 V9.5 H6 Z" fill="#f0e6cc"/>',
+  reliquary: '<path d="M8 8 h8 l-1 2 c2 1 3 4 3 6 c0 3 -2.5 5 -6 5 s-6 -2 -6 -5 c0 -2 1 -5 3 -6 Z" fill="#c9962e" stroke="#8a6d1d" stroke-width="1" stroke-linejoin="round"/><rect x="7.5" y="6.5" width="9" height="2" rx="1" fill="#d4a72c" stroke="#8a6d1d" stroke-width=".8"/><circle cx="12" cy="5.3" r="1.3" fill="#d4a72c" stroke="#8a6d1d" stroke-width=".8"/><circle cx="12" cy="15" r="2.2" fill="#b884d8" stroke="#7d4fa0" stroke-width=".8"/><path d="M8 11 q-2 .3 -2 2.6 M16 11 q2 .3 2 2.6" fill="none" stroke="#8a6d1d" stroke-width="1.4"/>',
+  book: '<path d="M12 6 C10 4.5 6.5 4.5 4 5.5 V19 C6.5 18 10 18 12 19.5 C14 18 17.5 18 20 19 V5.5 C17.5 4.5 14 4.5 12 6 Z" fill="#e8dcc2" stroke="#a37d1a" stroke-width="1" stroke-linejoin="round"/><path d="M12 6 V19.5" stroke="#a37d1a" stroke-width="1"/><path d="M6 8.5 H10 M6 11 H10 M14 8.5 H18 M14 11 H18" stroke="#9d9078" stroke-width=".8"/>',
+  helm: '<path d="M7 11 a5 6 0 0 1 10 0 v5 a2 2 0 0 1 -2 2 h-6 a2 2 0 0 1 -2 -2 Z" fill="#8a8d94" stroke="#5a5d64" stroke-width="1" stroke-linejoin="round"/><rect x="8" y="12.5" width="8" height="1.6" rx=".5" fill="#2b2d31"/><path d="M9 16 h6 M9 17.4 h6" stroke="#5a5d64" stroke-width="1"/><path d="M12 6 v-2" stroke="#d4a72c" stroke-width="1.6"/><circle cx="12" cy="4" r="1.2" fill="#d4a72c"/>',
+  satchel: '<rect x="5" y="11" width="14" height="10" rx="2" fill="#8a6d3b" stroke="#5c4826" stroke-width="1"/><path d="M5 13 V10 a3 3 0 0 1 3 -3 h8 a3 3 0 0 1 3 3 v3 a1 1 0 0 1 -1 1 H6 a1 1 0 0 1 -1 -1 Z" fill="#a3814a" stroke="#5c4826" stroke-width="1" stroke-linejoin="round"/><rect x="11" y="13" width="2" height="3" rx=".5" fill="#d4a72c" stroke="#a37d1a" stroke-width=".6"/>',
+  crossedswords: '<g stroke-linecap="round"><path d="M6 18 L17 6" stroke="#8a8d94" stroke-width="3"/><path d="M6 18 L17 6" stroke="#e2e4e8" stroke-width="1.4"/><path d="M18 18 L7 6" stroke="#8a8d94" stroke-width="3"/><path d="M18 18 L7 6" stroke="#e2e4e8" stroke-width="1.4"/></g><circle cx="6" cy="18.4" r="1.5" fill="#d4a72c"/><circle cx="18" cy="18.4" r="1.5" fill="#d4a72c"/>',
+  bed: '<rect x="3" y="16" width="18" height="4" rx="1" fill="#8a6d3b" stroke="#5c4826" stroke-width="1"/><rect x="3" y="11" width="2" height="9" rx=".6" fill="#8a6d3b" stroke="#5c4826" stroke-width="1"/><rect x="19" y="19" width="1.6" height="3" fill="#5c4826"/><rect x="3.4" y="19" width="1.6" height="3" fill="#5c4826"/><rect x="5" y="13" width="6" height="3.5" rx="1.2" fill="#e8dcc2" stroke="#9d9078" stroke-width=".8"/><path d="M10 16 h10 v-1 a1 1 0 0 0 -1 -1 h-8 a1 1 0 0 0 -1 1 Z" fill="#6f9ec9" stroke="#3f6a94" stroke-width=".8"/>',
+  mortar: '<ellipse cx="12" cy="12.5" rx="7" ry="1.8" fill="#e2e4e8" stroke="#8a8d94" stroke-width=".8"/><path d="M5 12.5 a7 6 0 0 0 14 0 Z" fill="#cfd2d8" stroke="#8a8d94" stroke-width="1" stroke-linejoin="round"/><path d="M8.5 13 q3.5 2.2 7 0" fill="none" stroke="#7fb069" stroke-width="1.6"/><line x1="9" y1="10.5" x2="16" y2="4" stroke="#8a6d3b" stroke-width="2.4" stroke-linecap="round"/><circle cx="16" cy="4" r="1.6" fill="#8a6d3b"/>',
+  dagger: '<path d="M12 2 L13.4 4 L12.6 12 L12 12.8 L11.4 12 L10.6 4 Z" fill="#cfd2d8" stroke="#8a8d94" stroke-width=".8" stroke-linejoin="round"/><rect x="8.5" y="12" width="7" height="1.8" rx=".8" fill="#8a6d3b"/><rect x="11.2" y="13.6" width="1.6" height="5.6" fill="#5c4826"/><circle cx="12" cy="19.6" r="1.3" fill="#8a6d3b"/>',
+  sword: '<path d="M12 2 L13.6 4 L12.8 14.5 L12 15.5 L11.2 14.5 L10.4 4 Z" fill="#e2e4e8" stroke="#8a8d94" stroke-width=".8"/><rect x="7.5" y="15" width="9" height="2" rx="1" fill="#cfd2d8" stroke="#8a8d94" stroke-width=".6"/><rect x="11" y="17" width="2" height="4" fill="#8a6d3b"/><circle cx="12" cy="21.5" r="1.4" fill="#cfd2d8"/>',
+  runeblade: '<path d="M12 2 L13.6 4 L12.8 14 L12 15 L11.2 14 L10.4 4 Z" fill="#cfd2d8" stroke="#6f9ec9" stroke-width="1"/><path d="M12 5 v6 M11 7.5 h2" stroke="#6f9ec9" stroke-width="1"/><rect x="8" y="14.5" width="8" height="2" rx="1" fill="#7d4fa0"/><rect x="11" y="16.5" width="2" height="4.5" fill="#5c4826"/><circle cx="12" cy="21.3" r="1.4" fill="#b884d8"/>',
+  greatblade: '<path d="M12 2 L14.5 5 L13.5 15 L12 16.5 L10.5 15 L9.5 5 Z" fill="#e2e4e8" stroke="#8a8d94" stroke-width="1"/><path d="M6 16 h12 l-2 2 h-8 Z" fill="#d4a72c" stroke="#a37d1a" stroke-width=".8" stroke-linejoin="round"/><rect x="11" y="18" width="2" height="3.5" fill="#8a6d3b"/><circle cx="12" cy="21.8" r="1.5" fill="#d4a72c"/>',
+  woodshield: '<path d="M12 2.5 L20 5.2 V11 C20 16.5 12 21.5 12 21.5 C12 21.5 4 16.5 4 11 V5.2 Z" fill="#8a6d3b" stroke="#5c4826" stroke-width="1.4" stroke-linejoin="round"/><path d="M12 3.2 V21 M6.5 7 V17 M17.5 7 V17" stroke="#5c4826" stroke-width=".8" opacity=".55"/><circle cx="12" cy="11" r="1.7" fill="#c9962e" stroke="#8a6d1d" stroke-width=".6"/>',
+  aegis: '<path d="M12 2.5 L20 5.2 V11 C20 16.5 12 21.5 12 21.5 C12 21.5 4 16.5 4 11 V5.2 Z" fill="#d4a72c" stroke="#a37d1a" stroke-width="1.4" stroke-linejoin="round"/><path d="M12 6 l1.4 3 3.2 .3 -2.4 2.1 .8 3.1 -3 -1.7 -3 1.7 .8 -3.1 -2.4 -2.1 3.2 -.3 Z" fill="#fff6d8" stroke="#a37d1a" stroke-width=".6" stroke-linejoin="round"/>',
+  charm: '<rect x="11" y="4" width="2" height="4" fill="#8a6d3b"/><path d="M9.5 5 h5" stroke="#a37d1a" stroke-width="1"/><circle cx="12" cy="14" r="6.5" fill="#6f9ec9" stroke="#3f6a94" stroke-width="1"/><circle cx="12" cy="14" r="4" fill="#e8dcc2"/><circle cx="12" cy="14" r="2" fill="#3f6a94"/><circle cx="12" cy="14" r="0.9" fill="#16130e"/>',
+  bread: '<path d="M5 13 a7 5 0 0 1 14 0 v3 a2 2 0 0 1 -2 2 H7 a2 2 0 0 1 -2 -2 Z" fill="#c9962e" stroke="#8a6d1d" stroke-width="1" stroke-linejoin="round"/><path d="M9 9.5 l-1 3 M12 8.8 v3.4 M15 9.5 l1 3" stroke="#8a6d1d" stroke-width="1" opacity=".7"/>',
+  boots: '<path d="M9 4 h3.5 v9 l4 3.2 v2.8 H9 Z" fill="#8a6d3b" stroke="#5c4826" stroke-width="1" stroke-linejoin="round"/><rect x="9" y="19" width="8.5" height="2" rx=".8" fill="#5c4826"/><path d="M9 8 h3.5" stroke="#5c4826" stroke-width="1" opacity=".6"/><rect x="9.4" y="4" width="2.7" height="1.6" fill="#c9962e"/>',
+  tome: '<path d="M6 4 h11 a2 2 0 0 1 2 2 v13 a2 2 0 0 1 -2 2 H6 Z" fill="#3f6a94" stroke="#2a4763" stroke-width="1" stroke-linejoin="round"/><rect x="6" y="4" width="2" height="17" fill="#2a4763"/><rect x="14.5" y="9" width="3.5" height="7" rx=".5" fill="#d4a72c" stroke="#a37d1a" stroke-width=".6"/><circle cx="16.2" cy="12.5" r="1" fill="#2a4763"/>',
+  pouch: '<path d="M7 10 c0 -2 2 -3 5 -3 s5 1 5 3 c2 2 3 5 3 7 a4 4 0 0 1 -4 4 h-8 a4 4 0 0 1 -4 -4 c0 -2 1 -5 3 -7 Z" fill="#8a6d3b" stroke="#5c4826" stroke-width="1" stroke-linejoin="round"/><path d="M8 8.5 q4 -2 8 0" fill="none" stroke="#5c4826" stroke-width="1.4"/><circle cx="12" cy="15.5" r="2.4" fill="#d4a72c" stroke="#a37d1a" stroke-width=".6"/><path d="M11 15.5 h2 M12 14.5 v2" stroke="#a37d1a" stroke-width=".7"/>',
+  totem: '<path d="M8 21 V8 a4 4 0 0 1 8 0 v13 Z" fill="#9d9078" stroke="#5c4826" stroke-width="1" stroke-linejoin="round"/><path d="M8.5 13 h7 M8.5 16 h7" stroke="#5c4826" stroke-width="1" opacity=".5"/><circle cx="12" cy="10" r="1.6" fill="#7d4fa0" stroke="#4e3168" stroke-width=".6"/><rect x="6.5" y="20.5" width="11" height="2" rx=".5" fill="#5c4826"/>',
+  chalice: '<path d="M7.5 5 h9 v2 a4.5 4.5 0 0 1 -9 0 Z" fill="#d4a72c" stroke="#a37d1a" stroke-width="1" stroke-linejoin="round"/><path d="M8 6 a4 2.6 0 0 0 8 0" fill="#d1604f"/><rect x="11" y="11.5" width="2" height="5" fill="#c9962e"/><circle cx="12" cy="11" r="1.3" fill="#c9962e"/><path d="M8 20 h8 l-1.2 -2 h-5.6 Z" fill="#d4a72c" stroke="#a37d1a" stroke-width="1" stroke-linejoin="round"/>',
+  amulet: '<path d="M6 5 a8 5 0 0 0 12 0" fill="none" stroke="#a37d1a" stroke-width="1.3"/><path d="M12 9.5 l3.2 3.2 -3.2 5.3 -3.2 -5.3 Z" fill="#b884d8" stroke="#7d4fa0" stroke-width="1" stroke-linejoin="round"/><path d="M9.3 12.7 h5.4" stroke="#e6cff5" stroke-width=".8" opacity=".7"/><circle cx="12" cy="8.6" r="1" fill="#d4a72c"/>',
+  signet: '<circle cx="12" cy="14.5" r="6.2" fill="none" stroke="#d4a72c" stroke-width="2.4"/><circle cx="12" cy="7" r="4" fill="#d4a72c" stroke="#a37d1a" stroke-width="1"/><path d="M12 5.4 v3.2 M10.4 7 h3.2" stroke="#8a6d1d" stroke-width="1"/>',
+  feather: '<path d="M17.5 4 C10 6 6 12 6 19 C6 19 8 20 10 19 C9 16 10.5 12 13.5 9 C11.5 12.5 11.5 15 12.5 17 C15.5 14 17.5 9 17.5 4 Z" fill="#e0912c" stroke="#c96a1f" stroke-width="1" stroke-linejoin="round"/><path d="M16 5.5 C12 8.5 10 13 10 18.5" fill="none" stroke="#f0c04a" stroke-width="1" opacity=".85"/>',
+  dragonheart: '<path d="M12 20 C12 20 4 14.5 4 8.8 C4 6 6 4.2 8.3 4.2 C9.9 4.2 11.3 5.2 12 6.4 C12.7 5.2 14.1 4.2 15.7 4.2 C18 4.2 20 6 20 8.8 C20 14.5 12 20 12 20 Z" fill="#d1604f" stroke="#a04435" stroke-width="1" stroke-linejoin="round"/><path d="M12 8 C12.7 10 14 10.6 13 12.8 C12.5 14.2 11 14.1 11 12.3 C11 10.9 12 10 12 8 Z" fill="#f0c04a"/>',
+  banner: '<rect x="6" y="3" width="1.6" height="18" rx=".8" fill="#8a6d3b"/><path d="M7.6 4 H19 L16 8 L19 12 H7.6 Z" fill="#d4a72c" stroke="#a37d1a" stroke-width="1" stroke-linejoin="round"/><circle cx="12.4" cy="8" r="2" fill="#8a1a1a"/>',
+  crown: '<path d="M3.5 18 V8.5 L8 12.5 L12 6 L16 12.5 L20.5 8.5 V18 Z" fill="#d4a72c" stroke="#a37d1a" stroke-width="1" stroke-linejoin="round"/><rect x="3.5" y="18" width="17" height="3" rx="1" fill="#c9962e" stroke="#a37d1a" stroke-width="1"/><circle cx="12" cy="10.5" r="1.4" fill="#d1604f"/><circle cx="6" cy="12.5" r="1" fill="#6f9ec9"/><circle cx="18" cy="12.5" r="1" fill="#6f9ec9"/>',
 };
 function icon(name, size = 15) {
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" style="vertical-align:-3px" aria-hidden="true">${ICON_ART[name]}</svg>`;
 }
+// Relic key → icon name mapping; relicIcon() renders the relic's display glyph.
+const RELIC_ICON = { dagger:'dagger', coin:'gold', charm:'charm', rations:'bread', silversword:'sword', woodshield:'woodshield', boots:'boots', tome:'tome', pouch:'pouch', runeblade:'runeblade', bulwark:'totem', banner:'banner', chalice:'chalice', amulet:'amulet', signet:'signet', greatblade:'greatblade', crown:'crown', phoenix:'feather', aegis:'aegis', dragonheart:'dragonheart' };
+function relicIcon(key, size = 18) { return icon(RELIC_ICON[key] || 'gold', size); }
 
 /* =====================================================================
  *  UI STATE & RENDERING
@@ -1576,7 +1608,7 @@ function renderHeader() {
 }
 
 function renderNav() {
-  const tabs = [['keep', '🏰 Keep'], ['tavern', '🍺 Tavern'], ['reliquary', '⚱ Reliquary'], ['campaigns', '📖 Campaigns'], ['roster', '🗡 Roster'], ['inventory', '🎒 Inventory']];
+  const tabs = [['keep', `${icon('castle',16)} Keep`], ['tavern', `${icon('tankard',16)} Tavern`], ['reliquary', `${icon('reliquary',16)} Reliquary`], ['campaigns', `${icon('book',16)} Campaigns`], ['roster', `${icon('helm',16)} Roster`], ['inventory', `${icon('satchel',16)} Inventory`]];
   $('nav').innerHTML = tabs.map(([k, label]) =>
     `<button class="${ui.view === k ? 'active' : ''}" onclick="A.setView('${k}')">${label}</button>`).join('');
 }
@@ -1645,7 +1677,7 @@ function relicLineHtml(h) {
   if (!r) return '';
   const t = RELICS[r.key];
   const ch = t.ward ? ` <span class="sub">(${r.charges}/${t.ward})</span>` : '';
-  return `<div class="ability"><span class="${'q-' + r.tier}">${t.icon} ${esc(t.name)}</span>${ch} — <span class="sub">${relicEffectText(r.key)}</span></div>`;
+  return `<div class="ability"><span class="${'q-' + r.tier}">${relicIcon(r.key,15)} ${esc(t.name)}</span>${ch} — <span class="sub">${relicEffectText(r.key)}</span></div>`;
 }
 
 // compact one-line relic summary for tight spaces (e.g. the party picker) — no effect text
@@ -1654,7 +1686,7 @@ function relicCompactHtml(h) {
   if (!r) return '';
   const t = RELICS[r.key];
   const ch = t.ward ? ` (${r.charges}/${t.ward})` : '';
-  return `<div class="sub"><span class="${'q-' + r.tier}">${t.icon} ${esc(t.name)}</span>${ch}</div>`;
+  return `<div class="sub"><span class="${'q-' + r.tier}">${relicIcon(r.key,14)} ${esc(t.name)}</span>${ch}</div>`;
 }
 
 function heroActions(h) {
@@ -1707,7 +1739,7 @@ function relicCard(r, actions, opts) {
   const glow = t.tier === 'legendary' ? ' legendary-glow' : '';
   return `<div class="card${glow}">
     <div class="spread">
-      <b class="${'q-' + t.tier}">${t.icon} ${esc(t.name)}</b>
+      <b class="${'q-' + t.tier}">${relicIcon(r.key,18)} ${esc(t.name)}</b>
       <span class="tag q-${t.tier}">${RELIC_TIERS[t.tier].name}</span>
     </div>
     <div class="ability">${relicEffectText(r.key)}${ch}</div>
@@ -1840,7 +1872,7 @@ function renderKeep() {
   html += legacyCardHtml();
 
   // training
-  html += `<h3>🎓 Training Yard <span class="sub">(${Math.round(trainingRate())} XP/hour, sessions end after ${CFG.TRAINING_CAP_H}h — the safe, slow path)</span></h3>`;
+  html += `<h3>${icon('crossedswords',16)} Training Yard <span class="sub">(${Math.round(trainingRate())} XP/hour, sessions end after ${CFG.TRAINING_CAP_H}h — the safe, slow path)</span></h3>`;
   const now = Date.now();
   state.training.forEach(t => {
     const h = heroById(t.heroId);
@@ -1857,7 +1889,7 @@ function renderKeep() {
   }
 
   // rest
-  html += `<h3>🛌 Barracks <span class="sub">(${CFG.REST_DURATION_H}h of rest — removes one injury mark, earns nothing)</span></h3>`;
+  html += `<h3>${icon('bed',16)} Barracks <span class="sub">(${CFG.REST_DURATION_H}h of rest — removes one injury mark, earns nothing)</span></h3>`;
   if (state.rests.length === 0) html += '<div class="empty">No one is resting.</div>';
   state.rests.forEach(r => {
     const h = heroById(r.heroId);
@@ -1873,7 +1905,7 @@ function renderKeep() {
     ${restable.length ? '' : '<span class="sub"> — no idle heroes carry injury marks</span>'}</div>`;
 
   // infirmary
-  html += `<h3>⚕ Infirmary <span class="sub">(pay gold to remove a mark instantly — ${CFG.INFIRMARY_BASE_COST}g + ${CFG.INFIRMARY_COST_PER_LEVEL}g per hero level)</span></h3>`;
+  html += `<h3>${icon('mortar',16)} Infirmary <span class="sub">(pay gold to remove a mark instantly — ${CFG.INFIRMARY_BASE_COST}g + ${CFG.INFIRMARY_COST_PER_LEVEL}g per hero level)</span></h3>`;
   const marked = state.heroes.filter(h => h.status !== 'dead' && h.marks > 0);
   if (!marked.length) html += '<div class="empty">No heroes carry injury marks. The Infirmary is quiet.</div>';
   marked.forEach(h => {
@@ -2034,7 +2066,7 @@ function renderReliquary() {
     const t = RELICS[entry.key];
     const glow = t.tier === 'legendary' ? ' legendary-glow' : '';
     html += `<div class="card${glow}">
-      <div class="spread"><b class="q-${t.tier}">${t.icon} ${esc(t.name)}</b><span class="tag q-${t.tier}">${RELIC_TIERS[t.tier].name}</span></div>
+      <div class="spread"><b class="q-${t.tier}">${relicIcon(entry.key,18)} ${esc(t.name)}</b><span class="tag q-${t.tier}">${RELIC_TIERS[t.tier].name}</span></div>
       <div class="ability">${relicEffectText(entry.key)}</div>
       <div class="flavor">${esc(t.flavor)}</div>
       <div class="row" style="margin-top:8px"><button class="act" ${state.gold < entry.price ? 'disabled' : ''} onclick="A.buyRelic(${i})">Buy — ${entry.price}g</button></div>
@@ -2145,7 +2177,7 @@ function briefingModal() {
   if (b.fallen.length) body += `<div class="row"><span class="red">${icon('fallen', 14)} Fallen — lost forever: ${b.fallen.map(esc).join(', ')}</span></div>`;
   if (!b.injured.length && !b.fallen.length) body += `<div class="row"><span class="green">🛡 Everyone came home unharmed.</span></div>`;
   (b.relicEvents || []).forEach(ev => body += `<div class="row"><span class="blue">${esc(relicEventLog(ev))}</span></div>`);
-  (b.relicDrops || []).forEach(d => body += `<div class="row"><span class="q-${d.tier}">🎁 Relic acquired: ${d.icon} ${esc(d.name)} (${RELIC_TIERS[d.tier].name})</span></div>`);
+  (b.relicDrops || []).forEach(d => body += `<div class="row"><span class="q-${d.tier}">🎁 Relic acquired: ${d.key ? relicIcon(d.key, 15) : d.icon} ${esc(d.name)} (${RELIC_TIERS[d.tier].name})</span></div>`);
   if (b.campaignComplete) body += `<div class="row"><span class="gold-t">🏆 Campaign complete: “${esc(b.campaignComplete)}”!${b.campaignNext ? ` “${esc(b.campaignNext)}” is now open.` : ''}</span></div>`;
   if (b.rankUp) body += `<div class="row"><span class="gold-t">🏅 New rank: “${esc(b.rankUp)}” — new tabard options may be unlocked!</span></div>`;
   body += '</div>';
@@ -2242,12 +2274,12 @@ function equipRelicModal() {
   const t = RELICS[r.key];
   const pool = livingHeroes().filter(h => h.status !== 'mission');
   return `<div id="modal-wrap" onclick="if(event.target.id==='modal-wrap')A.closeEquip()"><div class="modal">
-    <h2>Equip ${t.icon} ${esc(t.name)}</h2>
+    <h2>Equip ${relicIcon(r.key,16)} ${esc(t.name)}</h2>
     <div class="ability" style="margin-bottom:10px"><span class="q-${t.tier}">${RELIC_TIERS[t.tier].name}</span> — ${relicEffectText(r.key)}</div>
     ${pool.map(h => { const cur = heroRelic(h);
       return `<div class="pick-row" onclick="A.doEquipToHero(${h.id})">
         <span class="nm"><b>${esc(h.name)}</b> <span class="sub">Lv ${h.level} ${h.cls}</span></span>
-        ${cur ? `<span class="sub">holds ${RELICS[cur.key].icon} ${esc(RELICS[cur.key].name)} — will swap</span>` : '<span class="sub green">empty slot</span>'}
+        ${cur ? `<span class="sub">holds ${relicIcon(cur.key,14)} ${esc(RELICS[cur.key].name)} — will swap</span>` : '<span class="sub green">empty slot</span>'}
       </div>`; }).join('') || '<div class="empty">No available heroes — everyone is out on a mission.</div>'}
     <div style="text-align:right; margin-top:10px"><button class="ghost" onclick="A.closeEquip()">Cancel</button></div>
   </div></div>`;
@@ -2262,12 +2294,12 @@ function equipHeroModal() {
   return `<div id="modal-wrap" onclick="if(event.target.id==='modal-wrap')A.closeEquipHero()"><div class="modal">
     <h2>Relic for ${esc(h.name)} <span class="sub">Lv ${h.level} ${h.cls}</span></h2>
     ${cur ? `<div class="preview"><div class="spread">
-        <span class="q-${cur.tier}">${RELICS[cur.key].icon} ${esc(RELICS[cur.key].name)}</span>
+        <span class="q-${cur.tier}">${relicIcon(cur.key,15)} ${esc(RELICS[cur.key].name)}</span>
         <button class="ghost" onclick="A.unequipRelic(${cur.id})">Unequip</button></div>
       <div class="ability">${relicEffectText(cur.key)}</div></div>` : ''}
     <h3>Available relics</h3>
     ${avail.map(r => `<div class="pick-row" onclick="A.doEquipRelic(${r.id})">
-      <span class="nm"><b class="q-${r.tier}">${RELICS[r.key].icon} ${esc(RELICS[r.key].name)}</b> <span class="sub">${RELIC_TIERS[r.tier].name}</span>
+      <span class="nm"><b class="q-${r.tier}">${relicIcon(r.key,15)} ${esc(RELICS[r.key].name)}</b> <span class="sub">${RELIC_TIERS[r.tier].name}</span>
       <div class="sub">${relicEffectText(r.key)}</div></span>
     </div>`).join('') || '<div class="empty">No unequipped relics. Find or buy some first.</div>'}
     <div style="text-align:right; margin-top:10px"><button class="ghost" onclick="A.closeEquipHero()">Close</button></div>
@@ -2407,7 +2439,7 @@ function pickerModal() {
         <span>Duration: <b>${fmtDur(dur)}</b></span></div>
         <div class="row sub"><span>Injury risk per hero: ~${pct(avg(injS))} on success, ~${pct(avg(injF))} on failure</span></div>
         <div class="row sub"><span>Reward: ~${missionGoldReward(def.cr, !!story, picked, true)}g · ~${missionXpReward(def.cr, !!story, picked, representativeHero(picked), true)} XP each (partial on failure)</span></div>
-        ${(() => { const rl = picked.map(heroRelic).filter(Boolean); return rl.length ? `<div class="row sub"><span>Relics in play: ${rl.map(r => `<span class="q-${r.tier}">${RELICS[r.key].icon} ${esc(RELICS[r.key].name)}</span>`).join(', ')}</span></div>` : ''; })()}`;
+        ${(() => { const rl = picked.map(heroRelic).filter(Boolean); return rl.length ? `<div class="row sub"><span>Relics in play: ${rl.map(r => `<span class="q-${r.tier}">${relicIcon(r.key,14)} ${esc(RELICS[r.key].name)}</span>`).join(', ')}</span></div>` : ''; })()}`;
     } else if (picked.length < size) {
       inner += `<div class="sub">Pick ${size - picked.length} more…</div>`;
     } else {
