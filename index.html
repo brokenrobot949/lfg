@@ -1516,6 +1516,15 @@ function coin(size = 15) {
     <circle cx="10" cy="10" r="9" fill="var(--gold)" stroke="#a37d1a" stroke-width="1.5"/>
     <circle cx="10" cy="10" r="5.5" fill="none" stroke="#a37d1a" stroke-width="1" opacity="0.7"/></svg>`;
 }
+// small inline fantasy icons (drawn so they render identically everywhere and match the palette).
+// Used for display accents; emoji are kept for Chronicle log lines and flavor text.
+const ICON_ART = {
+  renown: '<path d="M12 2.5 l2.7 6 6.5 .5 -5 4.3 1.6 6.4 -5.8 -3.4 -5.8 3.4 1.6 -6.4 -5 -4.3 6.5 -.5 Z" fill="#d4a72c" stroke="#a37d1a" stroke-width="1" stroke-linejoin="round"/>',
+  fallen: '<path d="M12 3 C7.6 3 4.5 6 4.5 10.2 C4.5 12.6 5.6 14.2 7 15.2 V17.5 A1.5 1.5 0 0 0 8.5 19 H15.5 A1.5 1.5 0 0 0 17 17.5 V15.2 C18.4 14.2 19.5 12.6 19.5 10.2 C19.5 6 16.4 3 12 3 Z" fill="#e8dcc2" stroke="#9d9078" stroke-width="1" stroke-linejoin="round"/><circle cx="9" cy="11" r="2" fill="#221d15"/><circle cx="15" cy="11" r="2" fill="#221d15"/><path d="M12 13 l-1.1 2.2 h2.2 Z" fill="#221d15"/><path d="M9.5 19 V21 M12 19 V21.4 M14.5 19 V21" stroke="#9d9078" stroke-width="1"/>',
+};
+function icon(name, size = 15) {
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" style="vertical-align:-3px" aria-hidden="true">${ICON_ART[name]}</svg>`;
+}
 
 /* =====================================================================
  *  UI STATE & RENDERING
@@ -1595,7 +1604,7 @@ function heroStatusHtml(h) {
       return r ? `<span class="yellow">Resting</span> <span class="cd" data-cd="${r.end}"></span>` : 'Resting';
     }
     case 'injured': return `<span class="red">Injured</span> <span class="cd" data-cd="${h.injuredUntil}"></span>`;
-    case 'dead': return '<span class="red">☠ Fallen</span>';
+    case 'dead': return `<span class="red">${icon('fallen', 14)} Fallen</span>`;
   }
   return h.status;
 }
@@ -1747,7 +1756,7 @@ const emblemUnlocked = i => TABARD_EMBLEM_MIN_RANK[i] <= rankIdx();
 function renownCardHtml() {
   const idx = rankIdx(), rank = guildRank(), nr = nextRank();
   let html = `<div class="card">
-    <div>⭐ Renown <b>${state.renown}</b> · <b class="gold-t">${esc(rank.name)}</b></div>`;
+    <div>${icon('renown')} Renown <b>${state.renown}</b> · <b class="gold-t">${esc(rank.name)}</b></div>`;
   if (nr) {
     const filled = clamp((state.renown - rank.at) / (nr.at - rank.at) * 100, 0, 100);
     const nextIdx = idx + 1;
@@ -2000,7 +2009,7 @@ function renderRoster() {
     html += '</div>';
   }
   if (dead.length) {
-    html += '<h3 class="red">☠ Hall of the Fallen</h3><div class="grid">';
+    html += `<h3 class="red">${icon('fallen', 16)} Hall of the Fallen</h3><div class="grid">`;
     dead.forEach(h => {
       html += `<div class="card" style="opacity:.55"><div class="spread"><b>${esc(h.name)}</b>
         <span class="tag">${h.cls}</span></div>
@@ -2130,10 +2139,10 @@ function briefingModal() {
   let body = `<div class="preview">
     <div class="row"><span>💰 Gold brought home: <b class="gold-t">${b.gold}</b></span></div>
     <div class="row sub"><span>✨ Experience: ~${b.xpEach} XP to each of the ${b.partySize} heroes${b.success ? '' : ' (reduced — the mission failed)'}</span></div>
-    <div class="row"><span class="gold-t">⭐ Renown: +${b.renown}</span></div>`;
+    <div class="row"><span class="gold-t">${icon('renown')} Renown: +${b.renown}</span></div>`;
   if (b.leveled.length) body += `<div class="row"><span class="blue">⭐ Level up: ${b.leveled.map(l => `${esc(l.name)} → Lv ${l.level}`).join(', ')}</span></div>`;
   if (b.injured.length) body += `<div class="row"><span class="yellow">🩹 Injured (out ${b.recoveryTxt}, +1 mark): ${b.injured.map(esc).join(', ')}</span></div>`;
-  if (b.fallen.length) body += `<div class="row"><span class="red">☠ Fallen — lost forever: ${b.fallen.map(esc).join(', ')}</span></div>`;
+  if (b.fallen.length) body += `<div class="row"><span class="red">${icon('fallen', 14)} Fallen — lost forever: ${b.fallen.map(esc).join(', ')}</span></div>`;
   if (!b.injured.length && !b.fallen.length) body += `<div class="row"><span class="green">🛡 Everyone came home unharmed.</span></div>`;
   (b.relicEvents || []).forEach(ev => body += `<div class="row"><span class="blue">${esc(relicEventLog(ev))}</span></div>`);
   (b.relicDrops || []).forEach(d => body += `<div class="row"><span class="q-${d.tier}">🎁 Relic acquired: ${d.icon} ${esc(d.name)} (${RELIC_TIERS[d.tier].name})</span></div>`);
