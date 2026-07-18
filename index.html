@@ -224,6 +224,8 @@ const CFG = {
   // --- training (safe, slow XP) ---
   TRAINING_XP_PER_HOUR: 25,
   TRAINING_CAP_H: 8,            // a training session ends after this many hours
+  TRAINING_RAMP_MIN: 0.5,       // XP-rate multiplier at the very start of a session (slow)
+  TRAINING_RAMP_MAX: 2.0,       // ...ramping up to this multiple of the base rate by the cap
 
   // --- rest ---
   REST_DURATION_H: 8,           // removes one injury mark on completion
@@ -1021,8 +1023,19 @@ function legacyValue(key) {
 }
 // minimum level any new hero starts at (Veteran Blood floors it)
 const heroFloorLevel = () => Math.max(CFG.STARTER_LEVEL, legacyValue('veteran_blood') || 0);
-// training XP per hour, boosted by Drillmaster
+// training XP per hour, boosted by Drillmaster (hour-0 reference rate)
 const trainingRate = () => CFG.TRAINING_XP_PER_HOUR * (1 + (legacyValue('drillmaster') || 0));
+// instantaneous XP/hour after `hours` of training (ramps TRAINING_RAMP_MIN → MAX across the cap)
+function trainingRateAt(hours) {
+  const cap = CFG.TRAINING_CAP_H, h = Math.min(Math.max(hours, 0), cap);
+  return trainingRate() * (CFG.TRAINING_RAMP_MIN + (CFG.TRAINING_RAMP_MAX - CFG.TRAINING_RAMP_MIN) * h / cap);
+}
+// total XP accrued after `hours` of training (integral of the ramp, so it's super-linear)
+function trainingXpAt(hours) {
+  const cap = CFG.TRAINING_CAP_H, h = Math.min(Math.max(hours, 0), cap), b = trainingRate();
+  const rmin = CFG.TRAINING_RAMP_MIN, rmax = CFG.TRAINING_RAMP_MAX;
+  return Math.floor(b * (rmin * h + (rmax - rmin) / (2 * cap) * h * h));
+}
 // the charter can be retired once the final campaign is complete
 const charterEligible = () => state.campaigns[3] === 5;
 
@@ -1270,10 +1283,7 @@ function assignTraining(heroId) {
   save();
 }
 
-function trainingXpSoFar(t, now) {
-  const elapsed = Math.min(now, t.end) - t.start;
-  return Math.floor((elapsed / H) * trainingRate());
-}
+function trainingXpSoFar(t, now) { return trainingXpAt((Math.min(now, t.end) - t.start) / H); }
 
 function finishTraining(t, endTime) {
   const h = heroById(t.heroId);
@@ -1579,6 +1589,7 @@ const ui = {
   tabardEditor: null, // working copy {pattern,c1,c2,emblem} while designing the guild tabard
   legacyShop: false,  // Legacy perks modal
   confirmRetire: false, // retire-the-charter confirmation
+  jobCollapse: {},    // tier index → true when that job-board tier is collapsed
 };
 
 const $ = id => document.getElementById(id);
@@ -1680,13 +1691,13 @@ function relicLineHtml(h) {
   return `<div class="ability"><span class="${'q-' + r.tier}">${relicIcon(r.key,15)} ${esc(t.name)}</span>${ch} — <span class="sub">${relicEffectText(r.key)}</span></div>`;
 }
 
-// compact one-line relic summary for tight spaces (e.g. the party picker) — no effect text
+// compact one-line relic summary for tight spaces (e.g. the party picker)
 function relicCompactHtml(h) {
   const r = heroRelic(h);
   if (!r) return '';
   const t = RELICS[r.key];
   const ch = t.ward ? ` (${r.charges}/${t.ward})` : '';
-  return `<div class="sub"><span class="${'q-' + r.tier}">${relicIcon(r.key,14)} ${esc(t.name)}</span>${ch}</div>`;
+  return `<div class="sub"><span class="${'q-' + r.tier}">${relicIcon(r.key,14)} ${esc(t.name)}</span>${ch} — ${relicEffectText(r.key)}</div>`;
 }
 
 function heroActions(h) {
@@ -1872,13 +1883,13 @@ function renderKeep() {
   html += legacyCardHtml();
 
   // training
-  html += `<h3>${icon('crossedswords',16)} Training Yard <span class="sub">(${Math.round(trainingRate())} XP/hour, sessions end after ${CFG.TRAINING_CAP_H}h — the safe, slow path)</span></h3>`;
+  html += `<h3>${icon('crossedswords',16)} Training Yard <span class="sub">(starts ${Math.round(trainingRateAt(0))} XP/hr, ramps to ${Math.round(trainingRateAt(CFG.TRAINING_CAP_H))} XP/hr over ${CFG.TRAINING_CAP_H}h — the longer they train, the faster they learn)</span></h3>`;
   const now = Date.now();
   state.training.forEach(t => {
     const h = heroById(t.heroId);
     if (!h) return;
     html += `<div class="card"><div class="spread">
-      <div><b>${esc(h.name)}</b> <span class="sub">Lv ${h.level} ${h.cls}</span> — earned <b class="blue">${trainingXpSoFar(t, now)} XP</b> so far</div>
+      <div><b>${esc(h.name)}</b> <span class="sub">Lv ${h.level} ${h.cls}</span> — earned <b class="blue">${trainingXpSoFar(t, now)} XP</b> so far <span class="sub">(now ${Math.round(trainingRateAt((now - t.start) / H))} XP/hr)</span></div>
       <div class="row"><span class="cd" data-cd="${t.end}"></span>
       <button class="ghost" onclick="A.recallTraining(${h.id})">Recall</button></div>
     </div></div>`;
@@ -1944,8 +1955,9 @@ function renderTavern() {
     if (jobTierUnlocked(tier)) {
       const jobs = state.jobBoard.filter(j => j.tier === tier);
       if (!jobs.length) return;
-      html += `<h3 style="color:var(--muted); letter-spacing:1px; text-transform:uppercase; font-size:13px">${tierName}</h3>`;
-      jobs.forEach(j => { html += missionRow(j, null); });
+      const collapsed = !!ui.jobCollapse[tier];
+      html += `<h3 style="color:var(--muted); letter-spacing:1px; text-transform:uppercase; font-size:13px; cursor:pointer; user-select:none" onclick="A.toggleJobTier(${tier})">${collapsed ? '▸' : '▾'} ${tierName} <span class="sub">(${jobs.length})</span></h3>`;
+      if (!collapsed) jobs.forEach(j => { html += missionRow(j, null); });
     } else {
       html += `<div class="card" style="opacity:.6"><div class="spread">
         <b style="color:var(--muted); letter-spacing:1px; text-transform:uppercase; font-size:13px">🔒 ${tierName}</b>
@@ -2467,7 +2479,7 @@ function heroPickerModal() {
   const pool = purpose === 'train' ? idleHeroes() : idleHeroes().filter(h => h.marks > 0);
   const title = purpose === 'train' ? '🎓 Assign to training' : '🛌 Send to rest';
   const note = purpose === 'train'
-    ? `${Math.round(trainingRate())} XP/hour for up to ${CFG.TRAINING_CAP_H} hours.`
+    ? `Trains faster the longer they stay — up to ${Math.round(trainingRateAt(CFG.TRAINING_CAP_H))} XP/hour, for up to ${CFG.TRAINING_CAP_H} hours.`
     : `${CFG.REST_DURATION_H} hours; removes one injury mark.`;
   return `<div id="modal-wrap" onclick="if(event.target.id==='modal-wrap')A.closeHeroPicker()"><div class="modal">
     <h2>${title}</h2><div class="sub" style="margin-bottom:10px">${note}</div>
@@ -2643,6 +2655,7 @@ const A = {
   assignRest(id) { assignRest(id); render(); },
   recallTraining, cancelRest, healMark, recruitHero, payRefreshRecruits, upgradeKeep,
   setRosterTab(t) { ui.rosterTab = t; render(); },
+  toggleJobTier(tier) { ui.jobCollapse[tier] = !ui.jobCollapse[tier]; render(); },
   collectIncome() {
     const amt = accruedIncome(Date.now());
     if (!amt) return;
