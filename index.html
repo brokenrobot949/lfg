@@ -190,8 +190,10 @@ const CFG = {
   // --- leveling & ratings ---
   LEVEL_CAP: 20,
   XP_PER_LEVEL_STEP: 80,        // XP needed to go from level L to L+1 = this * L
-  RATING_PER_LEVEL: 10,         // hero rating = level * this + talent
-  TALENT_MAX: 5,                // per-hero talent bonus rolled 0..this at creation
+  RATING_PER_LEVEL: 10,         // hero rating = level * (this + potential growth) + spark
+  SPARK_MAX: 2,                 // small flat rating micro-variance rolled 0..this per hero
+  // Trait count roll: how many quirks a hero gets, weighted (mostly 1, rarely 3).
+  TRAIT_COUNT_WEIGHTS: [ {n:1,w:60}, {n:2,w:35}, {n:3,w:5} ],
 
   // --- new player ---
   STARTING_GOLD: 150,
@@ -266,7 +268,11 @@ const CFG = {
   RECRUIT_REFRESH_COST: 25,
   RECRUIT_COST_BASE: 40,
   RECRUIT_COST_PER_LEVEL: 30,
-  RECRUIT_COST_PER_TALENT: 12,
+  // recruit price adds for rarer potential, spark, and each rolled trait by tone
+  RECRUIT_COST_PER_POTENTIAL: { rooted: 0, promising: 20, gifted: 55, prodigy: 130, paragon: 320 },
+  RECRUIT_COST_PER_SPARK: 6,
+  RECRUIT_COST_GOOD_TRAIT: 25,
+  RECRUIT_COST_BAD_TRAIT: -12,
   RECRUIT_LEVELS_PER_CAMPAIGN: 3, // recruit max level = 1 + this * campaigns completed
 
   // --- powers ---
@@ -393,12 +399,68 @@ const POWER_KEYS = Object.keys(POWERS);
 const powersOfClass = cls => POWER_KEYS.filter(k => POWERS[k].cls === cls);
 const heroPower = h => POWERS[h && h.power] || null;
 
+/* ---------- Potential grades (rarity that scales rating per level) ---------- */
+// A hero's Potential is rolled once at creation; rarer grades add more rating per
+// level (see potentialGrowth / heroRating). `spark` is a small flat micro-variance.
+const POTENTIAL = {
+  rooted:    { name: 'Rooted',    color: '#b7ad99', weight: 55, growth: 0 },
+  promising: { name: 'Promising', color: '#7fb069', weight: 27, growth: 0.5 },
+  gifted:    { name: 'Gifted',    color: '#6f9ec9', weight: 12, growth: 1.2 },
+  prodigy:   { name: 'Prodigy',   color: '#b884d8', weight: 5,  growth: 2.0 },
+  paragon:   { name: 'Paragon',   color: '#e0912c', weight: 1,  growth: 3.0 },
+};
+const POTENTIAL_ORDER = ['rooted','promising','gifted','prodigy','paragon'];
+function rollPotential() { const tot = POTENTIAL_ORDER.reduce((s,k)=>s+POTENTIAL[k].weight,0); let r = Math.random()*tot; for (const k of POTENTIAL_ORDER) { r -= POTENTIAL[k].weight; if (r<=0) return k; } return 'rooted'; }
+
+/* ---------- Traits (1–3 rolled quirks, mostly positive with some drawbacks) ---------- */
+// Effect fields reuse the POWERS vocabulary exactly, so traits fold into the same
+// aggregation (party-wide via powerAgg, per-hero self effects via heroMods). `tone`
+// drives tag color, `spawn` is the roll weight, `desc` is display text.
+const TRAITS = {
+  brawny:      { name: 'Brawny',         tone: 'good',  spawn: 10, ratingFlat: 5,      desc: '+5 rating' },
+  lucky:       { name: 'Lucky',          tone: 'good',  spawn: 10, successFlat: 0.03,  desc: '+3% party success' },
+  nimble:      { name: 'Nimble',         tone: 'good',  spawn: 10, selfInjuryMult: 0.7, desc: '−30% personal injury chance' },
+  quickstudy:  { name: 'Quick Study',    tone: 'good',  spawn: 10, selfXpMult: 1.2,    desc: '+20% personal XP' },
+  silvertongue:{ name: 'Silver-Tongued', tone: 'good',  spawn: 9,  goldPct: 0.08,      desc: '+8% mission gold' },
+  inspiring:   { name: 'Inspiring',      tone: 'good',  spawn: 8,  partyXpPct: 0.05,   desc: '+5% party XP' },
+  stalwart:    { name: 'Stalwart',       tone: 'good',  spawn: 8,  recoveryMult: 0.85, desc: 'party heals 15% faster' },
+  hardy:       { name: 'Hardy',          tone: 'good',  spawn: 8,  partyInjuryMult: 0.92, desc: '−8% party injury chance' },
+  fleet:       { name: 'Fleet',          tone: 'good',  spawn: 8,  durationMult: 0.93, desc: '−7% mission duration' },
+  reckless:    { name: 'Reckless',       tone: 'mixed', spawn: 6,  ratingFlat: 8, selfInjuryMult: 1.4, desc: '+8 rating, but +40% personal injury' },
+  greedy:      { name: 'Greedy',         tone: 'mixed', spawn: 6,  goldPct: 0.10, partyXpPct: -0.04, desc: '+10% gold, but −4% party XP' },
+  frail:       { name: 'Frail',          tone: 'bad',   spawn: 6,  selfInjuryMult: 1.3, desc: '+30% personal injury chance' },
+  slowlearner: { name: 'Slow Learner',   tone: 'bad',   spawn: 5,  selfXpMult: 0.85,   desc: '−15% personal XP' },
+  cowardly:    { name: 'Cowardly',       tone: 'bad',   spawn: 5,  successFlat: -0.03, desc: '−3% party success' },
+};
+const TRAIT_KEYS = Object.keys(TRAITS);
+const heroTraits = h => (h && Array.isArray(h.traits) ? h.traits : []).map(k => TRAITS[k]).filter(Boolean);
+// Roll a hero's traits: pick a count from CFG.TRAIT_COUNT_WEIGHTS, then sample that
+// many DISTINCT trait keys weighted by each trait's `spawn`. Returns an array of keys.
+function rollTraits() {
+  const cw = CFG.TRAIT_COUNT_WEIGHTS;
+  const ctot = cw.reduce((s, o) => s + o.w, 0);
+  let cr = Math.random() * ctot, count = 1;
+  for (const o of cw) { cr -= o.w; if (cr <= 0) { count = o.n; break; } }
+  const pool = TRAIT_KEYS.slice(), out = [];
+  for (let i = 0; i < count && pool.length; i++) {
+    const tot = pool.reduce((s, k) => s + TRAITS[k].spawn, 0);
+    let r = Math.random() * tot, pick = pool[0];
+    for (const k of pool) { r -= TRAITS[k].spawn; if (r <= 0) { pick = k; break; } }
+    out.push(pick);
+    pool.splice(pool.indexOf(pick), 1);
+  }
+  return out;
+}
+// A hero's per-hero modifier sources: its power plus each of its traits (for SELF effects).
+const heroMods = hero => [heroPower(hero), ...heroTraits(hero)].filter(Boolean);
+
 // Aggregate the party's power effects into a single bundle for the mission math.
+// NOTE: this now also folds in each hero's TRAITS — they carry the same party-wide
+// effect fields as powers, so every powerAgg call site includes trait effects too.
 function powerAgg(heroes) {
   let successFlat = 0, underdog = 0, partyInjuryMult = 1, recoveryMult = 1, salvageMult = 1,
       goldPct = 0, partyXpPct = 0, durationMult = 1, ratingFlat = 0;
-  heroes.forEach(h => {
-    const p = heroPower(h); if (!p) return;
+  const fold = p => {
     successFlat += p.successFlat || 0;
     underdog += p.successUnderdog || 0;
     goldPct += p.goldPct || 0;
@@ -408,12 +470,16 @@ function powerAgg(heroes) {
     if (p.recoveryMult != null) recoveryMult *= p.recoveryMult;
     if (p.salvageMult != null) salvageMult *= p.salvageMult;
     if (p.durationMult != null) durationMult *= p.durationMult;
+  };
+  heroes.forEach(h => {
+    const p = heroPower(h); if (p) fold(p);
+    heroTraits(h).forEach(fold); // traits fold in with the same party-wide fields
   });
   return { successFlat, underdog, partyInjuryMult, recoveryMult, salvageMult, goldPct, partyXpPct, durationMult, ratingFlat };
 }
-// a hero whose power doesn't personally inflate XP — for the "~X XP each" estimate
+// a hero whose power/traits don't personally inflate XP — for the "~X XP each" estimate
 function representativeHero(heroes) {
-  return heroes.find(h => { const p = heroPower(h); return !(p && p.selfXpMult); }) || heroes[0];
+  return heroes.find(h => !heroMods(h).some(m => m.selfXpMult != null)) || heroes[0];
 }
 
 /* =====================================================================
@@ -710,12 +776,14 @@ function genName(cls) {
   return choice(pool.first) + ' ' + choice(pool.last);
 }
 
-function newHero(cls, level, talent) {
+function newHero(cls, level) {
   return {
     id: uid(), name: genName(cls), cls,
     power: choice(powersOfClass(cls)), // roll one of the class's three powers
     level, xp: 0,
-    talent: talent != null ? talent : rndInt(0, CFG.TALENT_MAX),
+    potential: rollPotential(),        // rarity grade — scales rating per level
+    spark: rndInt(0, CFG.SPARK_MAX),   // small flat rating micro-variance
+    traits: rollTraits(),              // 1–3 rolled quirks (mostly positive)
     marks: 0,
     status: 'idle',        // idle | mission | training | resting | injured | dead
     injuredUntil: 0,
@@ -727,6 +795,17 @@ function ensureHeroPower(h) {
   if (!h.power || !POWERS[h.power] || POWERS[h.power].cls !== h.cls) h.power = powersOfClass(h.cls)[0];
 }
 
+// migrate pre-Potential/Traits heroes: map old flat `talent` (0–5) to a grade + spark,
+// and give veterans no traits (non-destructive — their rating never drops).
+function ensureHeroTalent(h) {
+  if (!h.potential || !POTENTIAL[h.potential]) {
+    const t = typeof h.talent === 'number' ? h.talent : 0;
+    h.potential = t >= 5 ? 'paragon' : t === 4 ? 'prodigy' : t === 3 ? 'gifted' : t === 2 ? 'promising' : 'rooted';
+    h.spark = Math.min(CFG.SPARK_MAX, Math.max(0, t));
+  }
+  if (!Array.isArray(h.traits)) h.traits = []; // veterans predate traits — they simply have none
+}
+
 function completedCampaignCount() {
   return state.campaigns.filter(n => n >= 5).length;
 }
@@ -735,7 +814,7 @@ function genRecruit() {
   const maxLvl = Math.min(CFG.LEVEL_CAP, 1 + CFG.RECRUIT_LEVELS_PER_CAMPAIGN * completedCampaignCount());
   const level = Math.max(rndInt(1, maxLvl), heroFloorLevel());
   const h = newHero(choice(CLASS_NAMES), level);
-  h.cost = CFG.RECRUIT_COST_BASE + level * CFG.RECRUIT_COST_PER_LEVEL + h.talent * CFG.RECRUIT_COST_PER_TALENT;
+  h.cost = Math.max(Math.round(CFG.RECRUIT_COST_BASE * 0.5), CFG.RECRUIT_COST_BASE + level * CFG.RECRUIT_COST_PER_LEVEL + CFG.RECRUIT_COST_PER_POTENTIAL[h.potential] + h.spark * CFG.RECRUIT_COST_PER_SPARK + heroTraits(h).reduce((s, t) => s + (t.tone === 'good' ? CFG.RECRUIT_COST_GOOD_TRAIT : t.tone === 'bad' ? CFG.RECRUIT_COST_BAD_TRAIT : 0), 0));
   return h;
 }
 
@@ -1040,7 +1119,8 @@ function trainingXpAt(hours) {
 const charterEligible = () => state.campaigns[3] === 5;
 
 const xpToNext = lvl => CFG.XP_PER_LEVEL_STEP * lvl;
-const heroRating = h => h.level * CFG.RATING_PER_LEVEL + h.talent;
+const potentialGrowth = h => (POTENTIAL[h.potential] || POTENTIAL.rooted).growth;
+const heroRating = h => Math.round(h.level * (CFG.RATING_PER_LEVEL + potentialGrowth(h)) + (h.spark || 0));
 const countClass = (heroes, cls) => heroes.filter(h => h.cls === cls).length;
 
 function partyRating(heroes) {
@@ -1067,11 +1147,10 @@ function injuryChance(heroes, hero, cr, failed) {
   p = clamp(p, CFG.INJURY_MIN, CFG.INJURY_MAX);
   p *= powerAgg(heroes).partyInjuryMult;
   if (failed) p *= CFG.FAIL_INJURY_MULT;
-  const hp = heroPower(hero);
-  if (hp) {
-    if (hp.selfInjuryMult != null) p *= hp.selfInjuryMult;
-    if (hp.selfImmuneOnSuccess && !failed) p = 0;
-  }
+  heroMods(hero).forEach(m => {
+    if (m.selfInjuryMult != null) p *= m.selfInjuryMult;
+    if (m.selfImmuneOnSuccess && !failed) p = 0;
+  });
   const rel = heroRelic(hero); if (rel) p *= (RELICS[rel.key].injuryReduce || 1);
   return clamp(p, 0, 0.95);
 }
@@ -1104,7 +1183,7 @@ function missionXpReward(cr, story, heroes, hero, success) {
   let x = cr * CFG.XP_PER_CR * (story ? CFG.STORY_XP_MULT : 1);
   x *= 1 + powerAgg(heroes).partyXpPct + relicAgg(heroes).partyXp;
   x *= partySizeBonus(heroes);
-  const hp = heroPower(hero); if (hp && hp.selfXpMult != null) x *= hp.selfXpMult;
+  heroMods(hero).forEach(m => { if (m.selfXpMult != null) x *= m.selfXpMult; });
   const rel = heroRelic(hero); if (rel) x *= 1 + (RELICS[rel.key].xp || 0);
   if (!success) x *= failFraction(CFG.FAIL_XP_FRAC, heroes);
   return Math.round(x);
@@ -1435,6 +1514,8 @@ function applyImport(text) {
   if (!state.nextId) state.nextId = Math.max(0, ...state.heroes.map(h => h.id || 0)) + 1;
   state.heroes.forEach(ensureHeroPower);
   (state.recruits || []).forEach(ensureHeroPower);
+  state.heroes.forEach(ensureHeroTalent);          // map old talent → potential/spark; give veterans no traits
+  (state.recruits || []).forEach(ensureHeroTalent);
   processEvents(now);
   if (!Array.isArray(state.recruits) || !state.recruits.length) refreshRecruitPool();
   autoRefreshRecruits(now);
@@ -1585,11 +1666,13 @@ const ui = {
   equipRelic: null,   // relicId being assigned to a hero (Inventory → hero)
   equipHero: null,    // heroId choosing a relic (Roster → relic)
   confirmReset: false, // reset-all-data confirmation
+  codexModal: false,  // Guild Codex help modal
   invTab: 'open',     // 'open' | 'equipped' — Inventory sub-tab
   tabardEditor: null, // working copy {pattern,c1,c2,emblem} while designing the guild tabard
   legacyShop: false,  // Legacy perks modal
   confirmRetire: false, // retire-the-charter confirmation
   jobCollapse: {},    // tier index → true when that job-board tier is collapsed
+  campaignCollapse: {}, // campaign index → true when that campaign's missions are collapsed
 };
 
 const $ = id => document.getElementById(id);
@@ -1599,7 +1682,7 @@ function setView(v) { ui.view = v; render(); }
 function render() {
   renderHeader();
   renderNav();
-  const views = { keep: renderKeep, tavern: renderTavern, reliquary: renderReliquary, campaigns: renderCampaigns, roster: renderRoster, inventory: renderInventory };
+  const views = { keep: renderKeep, tavern: renderTavern, commissions: renderCommissions, reliquary: renderReliquary, campaigns: renderCampaigns, roster: renderRoster, inventory: renderInventory };
   $('view').innerHTML = views[ui.view]();
   renderModal();
   renderDrawer();
@@ -1615,11 +1698,12 @@ function renderHeader() {
     <div class="brand">⚜ LFG<small>${state.guildName ? esc(state.guildName) : 'guildmaster'}</small>${state.guildName ? `<small style="font-size:10px; color:var(--muted)">${esc(guildRank().name)}</small>` : ''}</div>
     <div class="goldbox">${coin(16)} ${state.gold}</div>
     <div class="timers">${chips.join('') || '<span class="chip">All quiet — everyone is home.</span>'}</div>
+    <button class="ghost" onclick="A.openCodex()" title="Guild Codex — how to play">?</button>
     <button class="ghost" onclick="A.toggleDrawer()">📜 Chronicle</button>`;
 }
 
 function renderNav() {
-  const tabs = [['keep', `${icon('castle',16)} Keep`], ['tavern', `${icon('tankard',16)} Tavern`], ['reliquary', `${icon('reliquary',16)} Reliquary`], ['campaigns', `${icon('book',16)} Campaigns`], ['roster', `${icon('helm',16)} Roster`], ['inventory', `${icon('satchel',16)} Inventory`]];
+  const tabs = [['keep', `${icon('castle',16)} Keep`], ['tavern', `${icon('tankard',16)} Tavern`], ['commissions', `${icon('crossedswords',16)} Commissions`], ['reliquary', `${icon('reliquary',16)} Reliquary`], ['campaigns', `${icon('book',16)} Campaigns`], ['roster', `${icon('helm',16)} Roster`], ['inventory', `${icon('satchel',16)} Inventory`]];
   $('nav').innerHTML = tabs.map(([k, label]) =>
     `<button class="${ui.view === k ? 'active' : ''}" onclick="A.setView('${k}')">${label}</button>`).join('');
 }
@@ -1652,6 +1736,23 @@ function heroStatusHtml(h) {
   return h.status;
 }
 
+// colored pill showing a hero's Potential grade (falls back to Rooted if missing)
+function potentialBadge(h) {
+  const p = POTENTIAL[h.potential] || POTENTIAL.rooted;
+  return `<span class="tag" style="color:${p.color}; border-color:${p.color}">${esc(p.name)}</span>`;
+}
+// small tags for a hero's traits, colored by tone; '' if none
+const TRAIT_TONE_COLOR = { good: '#7fb069', bad: '#d1604f', mixed: '#e0b84c' };
+function traitTags(h) {
+  const ts = heroTraits(h);
+  if (!ts.length) return '';
+  return ts.map(t => {
+    const col = TRAIT_TONE_COLOR[t.tone] || 'var(--muted)';
+    const warn = t.tone === 'good' ? '' : '⚠ ';
+    return `<span class="tag" style="color:${col}; border-color:${col}" title="${esc(t.desc)}">${warn}${esc(t.name)}</span>`;
+  }).join(' ');
+}
+
 function heroCard(h, actions) {
   const c = CLASSES[h.cls];
   const need = xpToNext(h.level);
@@ -1665,12 +1766,13 @@ function heroCard(h, actions) {
       <div><span class="tag ${c.role}">${ROLE_ICON[c.role]} ${h.cls}</span></div>
     </div>
     <div class="spread" style="margin-top:2px">
-      <span class="sub">Rating <b class="gold-t">${heroRating(h)}</b> · Talent +${h.talent}</span>
+      <span class="sub">Rating <b class="gold-t">${heroRating(h)}</b> · ${potentialBadge(h)}${h.spark ? ` <span class="sub">+${h.spark}</span>` : ''}</span>
       ${marksHtml(h)}
     </div>
     ${xpBar}
     <div style="margin:4px 0">${heroStatusHtml(h)}</div>
     ${powerLineHtml(h)}
+    ${traitTags(h) ? `<div style="margin-top:4px">${traitTags(h)}</div>` : ''}
     ${relicLineHtml(h)}
     ${actions ? `<div class="row" style="margin-top:8px">${actions}</div>` : ''}
   </div>`;
@@ -1842,6 +1944,7 @@ function renderKeep() {
   const lvl = state.keepLevel;
   const nextCost = lvl < CFG.KEEP_MAX_LEVEL ? CFG.KEEP_UPGRADE_COSTS[lvl - 1] : null;
   let html = `<h2>🏰 The Keep — Level ${lvl}</h2>
+  <div class="flavor" style="margin-bottom:10px">Home ground — where your banner hangs, the coffers fill, and the wounded are made whole again.</div>
   <div class="card">
     <div class="spread" style="margin-bottom:8px">
       <div class="row">
@@ -1933,6 +2036,7 @@ function renderKeep() {
 /* ---------- Tavern ---------- */
 function renderTavern() {
   let html = `<h2>🍺 The Tavern</h2>
+  <div class="flavor" style="margin-bottom:10px">Ale, rumor, and restless blades for hire — every great guild is built from strangers who walked through this door.</div>
   <div class="spread"><h3 style="margin:0">Adventurers for Hire <span class="sub">(roster ${livingHeroes().length}/${rosterCap()} · new faces in <span class="cd" data-cd="${state.recruitsExpire}"></span>)</span></h3>
     <button class="ghost" ${state.gold < CFG.RECRUIT_REFRESH_COST ? 'disabled' : ''} onclick="A.payRefreshRecruits()">Buy a round — new faces (${CFG.RECRUIT_REFRESH_COST}g)</button>
   </div><div class="grid" style="margin-top:8px">`;
@@ -1942,15 +2046,24 @@ function renderTavern() {
     const full = livingHeroes().length >= rosterCap();
     html += `<div class="card">
       <div class="spread"><b>${esc(r.name)}</b> <span class="tag ${c.role}">${ROLE_ICON[c.role]} ${r.cls}</span></div>
-      <div class="sub">Level ${r.level} · Rating ${heroRating(r)} · Talent +${r.talent}</div>
+      <div class="sub">Level ${r.level} · Rating ${heroRating(r)} · ${potentialBadge(r)}${r.spark ? ` <span class="sub">+${r.spark}</span>` : ''}</div>
       ${powerLineHtml(r)}
+      ${traitTags(r) ? `<div style="margin-top:4px">${traitTags(r)}</div>` : ''}
       <div class="row" style="margin-top:8px">
         <button class="act" ${state.gold < r.cost || full ? 'disabled' : ''} onclick="A.recruitHero(${i})">Recruit — ${r.cost}g</button>
         ${full ? '<span class="sub red">Roster full — upgrade the Keep</span>' : ''}
       </div>
     </div>`;
   });
-  html += `</div><h3>📋 Job Board <span class="sub">(repeatable practice missions — postings rotate over time)</span></h3>`;
+  html += `</div>`;
+  return html;
+}
+
+/* ---------- Commissions (the job board) ---------- */
+function renderCommissions() {
+  let html = `<h2>📋 Commissions</h2>
+  <div class="flavor" style="margin-bottom:10px">The board groans with work: bounties, escorts, and the dirty little jobs that keep a guild fed.</div>`;
+  html += `<h3>📋 Commission Board <span class="sub">(repeatable practice missions — postings rotate over time)</span></h3>`;
   JOB_TIERS.forEach((tierName, tier) => {
     if (jobTierUnlocked(tier)) {
       const jobs = state.jobBoard.filter(j => j.tier === tier);
@@ -1997,18 +2110,25 @@ function missionRow(def, story, statusHtml) {
 
 /* ---------- Campaigns ---------- */
 function renderCampaigns() {
-  let html = '<h2>📖 Campaigns</h2>';
+  let html = `<h2>📖 Campaigns</h2>
+  <div class="flavor" style="margin-bottom:10px">The great threats of the age gather in the dark — and someone must answer them.</div>`;
   CAMPAIGNS.forEach((camp, c) => {
     const unlocked = c === 0 || state.campaigns[c - 1] >= 5;
     const done = state.campaigns[c];
-    html += `<div class="card" style="background:var(--panel2)">
-      <div class="spread"><b style="color:var(--gold)">${unlocked ? '' : '🔒 '}${esc(camp.name)}</b>
-      <span class="sub">${camp.levelHint} · ${done}/5 complete</span></div>
-      <div class="flavor">${esc(camp.desc)}</div></div>`;
     if (!unlocked) {
+      html += `<div class="card" style="background:var(--panel2)">
+        <div class="spread"><b style="color:var(--gold)">🔒 ${esc(camp.name)}</b>
+        <span class="sub">${camp.levelHint} · ${done}/5 complete</span></div>
+        <div class="flavor">${esc(camp.desc)}</div></div>`;
       html += `<div class="empty" style="margin-bottom:14px">Complete “${esc(CAMPAIGNS[c - 1].name)}” to unlock.</div>`;
       return;
     }
+    const collapsed = !!ui.campaignCollapse[c];
+    html += `<div class="card" style="background:var(--panel2); cursor:pointer; user-select:none" onclick="A.toggleCampaign(${c})">
+      <div class="spread"><b style="color:var(--gold)">${collapsed ? '▸' : '▾'} ${esc(camp.name)}</b>
+      <span class="sub">${camp.levelHint} · ${done}/5 complete</span></div>
+      <div class="flavor">${esc(camp.desc)}</div></div>`;
+    if (collapsed) { html += '<div style="height:14px"></div>'; return; }
     camp.missions.forEach((mdef, i) => {
       let statusHtml;
       const inProgress = state.activeMissions.some(m => m.story && m.story.c === c && m.story.i === i);
@@ -2037,7 +2157,8 @@ function renderRoster() {
   const living = livingHeroes();
   const dead = state.heroes.filter(h => h.status === 'dead');
   const roleCount = role => living.filter(h => CLASSES[h.cls].role === role).length;
-  let html = `<h2>🗡 Roster <span class="sub">${living.length}/${rosterCap()} heroes</span></h2>`;
+  let html = `<h2>🗡 Roster <span class="sub">${living.length}/${rosterCap()} heroes</span></h2>
+  <div class="flavor" style="margin-bottom:10px">Your people — grizzled veterans and wide-eyed greenhorns alike, each with a name worth remembering.</div>`;
   const tabs = [['all', `All (${living.length})`], ['tank', `🛡 Tanks (${roleCount('tank')})`],
                 ['healer', `✚ Healers (${roleCount('healer')})`], ['dps', `⚔ DPS (${roleCount('dps')})`]];
   html += `<div class="row" style="margin-bottom:10px">` + tabs.map(([k, label]) =>
@@ -2094,6 +2215,7 @@ function renderInventory() {
   const openCount = relics.filter(r => !r.equippedBy).length;
   const equippedCount = relics.filter(r => r.equippedBy).length;
   let html = `<h2>🎒 Inventory <span class="sub">${relics.length} relic${relics.length !== 1 ? 's' : ''}</span></h2>
+    <div class="flavor" style="margin-bottom:10px">Relics wrenched from tomb and battlefield, each waiting for the right hand to wake it.</div>
     <div class="sub" style="margin-bottom:10px">Each hero equips one relic; its effect applies automatically on missions. Consumable relics break when their charges run out.</div>
     <div class="row" style="margin-bottom:10px">
       <button class="subtab ${ui.invTab === 'open' ? 'active' : ''}" onclick="A.setInvTab('open')">🟢 Available (${openCount})</button>
@@ -2132,6 +2254,7 @@ function renderModal() {
   if (ui.awayMsgs) { root.innerHTML = awayModal(); return; }
   if (state.briefings.length) { root.innerHTML = briefingModal(); return; }
   if (ui.dataModal) { root.innerHTML = dataModal(); return; }
+  if (ui.codexModal) { root.innerHTML = codexModal(); return; }
   if (ui.tabardEditor) { root.innerHTML = tabardEditorModal(); return; }
   if (ui.legacyShop) { root.innerHTML = legacyShopModal(); return; }
   if (ui.confirmRetire) { root.innerHTML = retireModal(); return; }
@@ -2234,6 +2357,45 @@ function dataModal() {
     </div>
 
     <div style="text-align:right; margin-top:14px"><button class="ghost" onclick="A.closeData()">Close</button></div>
+  </div></div>`;
+}
+
+// Guild Codex — a compact "how to play" help modal opened by the header ? button.
+function codexModal() {
+  return `<div id="modal-wrap" onclick="if(event.target.id==='modal-wrap')A.closeCodex()"><div class="modal">
+    <h2>📖 Guild Codex</h2>
+    <div class="flavor" style="margin-bottom:12px">A guildmaster's primer — the short of it, and a whisper of what lies deeper.</div>
+
+    <h3 style="margin-top:0">The Basics</h3>
+    <div class="sub">You are the guildmaster, not the hero. Recruit blades at the <b>Tavern</b>, form a party
+      (<b>4–6 heroes</b>, always at least <b>1 tank, 1 healer, 2 DPS</b>), and send them out from the
+      <b>Commission Board</b> or the <b>Campaigns</b>. Missions run in real time and keep resolving even
+      while the game is closed — success pays <b class="gold-t">gold + XP</b>, and heroes level up (cap 20).</div>
+    <div class="sub" style="margin-top:6px">Every mission risks injury. <b class="red">Three injury marks means permanent death</b>,
+      so don't overreach. Rest in the <b>Barracks</b> or pay the <b>Infirmary</b> to clear marks, and train at
+      the <b>Keep</b> for safe, slow XP when you'd rather not gamble a wound.</div>
+
+    <h3>Hero Potential</h3>
+    <div class="sub">Each hero rolls a one-time <b>Potential</b> grade at recruitment
+      (Rooted → Promising → Gifted → Prodigy → Paragon; rarer is better) that sets how fast their rating
+      grows per level, plus <b>1–3 Traits</b> — quirks, mostly helpful. Two same-level recruits are <i>not</i>
+      equal: a Paragon outgrows a Rooted dramatically. Recruit with an eye on Potential, not just level.</div>
+
+    <h3>The Commission Board</h3>
+    <div class="sub">Repeatable practice missions in level-gated tiers (Novice → Legendary) that rotate over
+      time. This is your bread-and-butter grind for gold and XP between story chapters.</div>
+
+    <h3>Campaigns</h3>
+    <div class="sub">Four story campaigns of five missions each — milestone tests that pay a premium in gold.
+      Complete missions in order to unlock the next; finishing a whole campaign is a major achievement with
+      special rewards.</div>
+
+    <h3>Beyond</h3>
+    <div class="flavor">They say a guild that conquers the realm's final threat need not end there — that a
+      guildmaster may lay down the charter and begin anew, carrying their name and hard-won gifts into a
+      fresh dawn. But that is a tale for another night.</div>
+
+    <div style="text-align:right; margin-top:14px"><button class="ghost" onclick="A.closeCodex()">Close</button></div>
   </div></div>`;
 }
 
@@ -2428,8 +2590,9 @@ function pickerModal() {
     roles[role].forEach(h => {
       const sel = ui.picked.includes(h.id);
       rows += `<div class="pick-row ${sel ? 'sel' : ''}" onclick="A.togglePick(${h.id})">
-        <span class="nm"><b>${esc(h.name)}</b> <span class="sub">Lv ${h.level} ${h.cls} · Rating ${heroRating(h)}</span>
+        <span class="nm"><b>${esc(h.name)}</b> <span class="sub">Lv ${h.level} ${h.cls} · Rating ${heroRating(h)}</span> · ${potentialBadge(h)}
         ${powerLineHtml(h)}
+        ${traitTags(h) ? `<div style="margin-top:2px">${traitTags(h)}</div>` : ''}
         ${relicCompactHtml(h)}</span>
         ${h.marks === CFG.MAX_MARKS - 1 ? '<span class="red" title="One more injury kills this hero">⚠ 2 marks</span>' : marksHtml(h)}
       </div>`;
@@ -2549,6 +2712,8 @@ const A = {
   // --- backup & restore ---
   openData() { ui.dataModal = true; renderModal(); },
   closeData() { ui.dataModal = false; renderModal(); },
+  openCodex() { ui.codexModal = true; renderModal(); },
+  closeCodex() { ui.codexModal = false; renderModal(); },
   exportDownload() {
     const data = exportSaveText();
     try {
@@ -2656,6 +2821,7 @@ const A = {
   recallTraining, cancelRest, healMark, recruitHero, payRefreshRecruits, upgradeKeep,
   setRosterTab(t) { ui.rosterTab = t; render(); },
   toggleJobTier(tier) { ui.jobCollapse[tier] = !ui.jobCollapse[tier]; render(); },
+  toggleCampaign(c) { ui.campaignCollapse[c] = !ui.campaignCollapse[c]; render(); },
   collectIncome() {
     const amt = accruedIncome(Date.now());
     if (!amt) return;
@@ -2748,6 +2914,8 @@ function tick() {
     if (!Array.isArray(state.briefings)) state.briefings = [];
     state.heroes.forEach(ensureHeroPower);           // heroes from before powers existed
     (state.recruits || []).forEach(ensureHeroPower);
+    state.heroes.forEach(ensureHeroTalent);          // heroes from before potential/traits existed
+    (state.recruits || []).forEach(ensureHeroTalent);
     const away = now - (state.lastSeen || now);
     const logBefore = state.log.length;
     const processed = processEvents(now);
